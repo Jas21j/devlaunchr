@@ -14,7 +14,8 @@ import type { AppInfo, Project, RuntimeState, Settings, ThemePreference } from '
 import type { ListeningPort, Requirement } from '@shared/ipc'
 import { detectProject, pinnedPort } from './detect'
 import { scan } from './scanner'
-import { listListeners } from './ports'
+import { belongsTo, listeners as readListeners, processTable } from './processTable'
+import { previewHost } from './ownership'
 import { inspectRequirements } from './requirements'
 import * as runtime from './processManager'
 import * as store from './store'
@@ -278,19 +279,26 @@ export function registerIpc(): void {
   // --------------------------------------------------------------- ports
 
   ipcMain.handle(CH.systemListeners, async (): Promise<ListeningPort[]> => {
-    const listeners = await listListeners()
+    const [listeners, table] = await Promise.all([readListeners(), processTable()])
     const projects = store.getProjects()
 
-    const ours = new Map<number, Project>()
+    const ours = new Map<number, { project: Project; pid: number | null }>()
     for (const project of projects) {
       const state = runtime.getState(project.id)
-      if (state.port !== null && state.status === 'running') ours.set(state.port, project)
+      if (state.port !== null && state.status === 'running') ours.set(state.port, { project, pid: state.pid })
     }
 
     return listeners.map((listener) => {
-      const project = ours.get(listener.port)
+      // The port number alone is not proof. When two processes share a port on
+      // different addresses, only the sockets in the project's own process
+      // tree are the project's. (A static project is served by devLaunchr
+      // itself and has no pid of its own.)
+      const claim = ours.get(listener.port)
+      const project =
+        claim && (claim.pid === null || belongsTo(listener.pid, claim.pid, table)) ? claim.project : undefined
       return {
         ...listener,
+        url: `http://${previewHost(listener.address)}:${listener.port}/`,
         projectId: project?.id ?? null,
         projectName: project?.name ?? null
       }

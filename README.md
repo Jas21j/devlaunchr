@@ -26,6 +26,8 @@ scanning, process supervision, and HTTP health checks against loopback.
   the project's own Open Graph image before that.
 - **Lists every listening port on the machine**, yours or not, so a port
   collision names the process holding it instead of printing an error code.
+- **Keeps every project on its own port.** A preview only ever shows the
+  project it belongs to: see [One project, one port](#one-project-one-port).
 
 ## Download
 
@@ -83,7 +85,8 @@ npm run smoke
 ```
 
 It covers persistence and normalization, process start/stop including
-process-group kill, port allocation and collisions, crash and missing-binary
+process-group kill, port allocation and collisions (including ports shared
+across addresses and framework port flags), crash and missing-binary
 detection, the orphan reaper's PID-recycling guard, dependency detection across
 ecosystems, and thumbnail capture.
 
@@ -111,13 +114,48 @@ To ship signed macOS builds, set the `MAC_CERTIFICATE` and
 `MAC_CERTIFICATE_PASSWORD` repository secrets. Without them, builds are ad-hoc
 signed — they run locally but warn on other machines.
 
+## One project, one port
+
+Starting one project must never open another project's site. On macOS (and on
+Windows with some servers) two processes can listen on the same port at once,
+one on `127.0.0.1` and the other on `0.0.0.0` or `::1`; a browser asking for
+`localhost` then gets whichever socket is more specific. Vite, Astro, Next and
+Nuxt also ignore `$PORT` and start on their own default, which is how a second
+project ends up "running" on the first one's port. devLaunchr closes each gap:
+
+- **A port is free only if nothing answers on it anywhere.** The check binds
+  `127.0.0.1`, `::1`, `0.0.0.0` and `::`, tries to connect to both loopbacks,
+  and consults the listener table. Any hit means taken.
+- **Frameworks get their port explicitly.** For a plain `npm run dev` style
+  script, devLaunchr passes `--port` and a loopback `--host` to Vite, Astro,
+  Next and Nuxt (Vite also gets `--strictPort`). Custom commands, compound
+  scripts and scripts that already choose a port are left untouched. The port
+  is written into the command as a number, so it also works under PowerShell.
+- **A pinned port is checked before anything is spawned.** If a start command
+  names its own port and something holds it, the start stops with the holder's
+  name instead of timing out.
+- **Healthy means ours, and only ours.** A server counts as running only when
+  every socket on its port belongs to the process tree devLaunchr started. A
+  port shared with a stranger is reported as a conflict naming that process,
+  and the project's server is stopped rather than left holding the port.
+- **Previews use the project's own address.** The URL comes from the socket
+  the project bound (`127.0.0.1` or `[::1]`), never from "whatever answers on
+  localhost". The Ports panel follows the same rule.
+
+All of this reads from one cached snapshot of the process and socket tables
+(`src/main/processTable.ts`), batched into a single `lsof`/`ps` call instead of
+one subprocess per listener. `npm run smoke:ports` reproduces each collision
+with a real foreign server and checks what the preview would actually show.
+
 ## Platform differences
 
-`src/main/platform.ts` is the only place the code branches on the operating
-system. It covers the shell used to run project commands, how a process tree is
+`src/main/platform.ts` and `src/main/processTable.ts` are the only places the
+code branches on the operating system. The first covers the shell used to run project commands, how a process tree is
 killed (`kill(-pid)` on Unix, `taskkill /T` on Windows), how a pid's start time
 is read for the recycling guard, where a Python virtualenv keeps its binaries,
 and how listening ports are enumerated (`lsof` versus `netstat` + `tasklist`).
+The second reads the process tree and per-process details (`ps` and `lsof`
+versus `Get-CimInstance`).
 
 ## Architecture
 

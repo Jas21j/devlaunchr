@@ -1,9 +1,10 @@
 import { realpathSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import type { Project } from '@shared/types'
-import { listListeners } from './ports'
+import type { Listener } from './ports'
 import { portFromCommand } from './dependencies'
-import { processCommandLine, processWorkingDirectory } from './platform'
+import { belongsTo, commandLines, listeners as readListeners, processTable, workingDirectories } from './processTable'
+import { previewHost } from './ownership'
 
 /**
  * A server that is already running, started by something other than
@@ -69,16 +70,11 @@ export async function findExternalServers(
 ): Promise<ExternalServer[]> {
   if (projects.length === 0) return []
 
-  let listeners
-  try {
-    listeners = await listListeners()
-  } catch {
-    return []
-  }
-  if (listeners.length === 0) return []
-
   const candidates = projects.filter((project) => !isManagedByUs(project.id))
   if (candidates.length === 0) return []
+
+  const listeners = await readListeners()
+  if (listeners.length === 0) return []
 
   const found = new Map<string, ExternalServer>()
   const claimedPorts = new Set<number>()
@@ -89,26 +85,51 @@ export async function findExternalServers(
     matchedBy: ExternalServer['matchedBy']
   ): void => {
     if (found.has(project.id) || claimedPorts.has(listener.port)) return
+    const socket = byPort.get(listener.port)!
     found.set(project.id, {
       projectId: project.id,
       port: listener.port,
       pid: listener.pid,
       command: listener.command,
-      url: `http://127.0.0.1:${listener.port}/`,
+      url: `http://${previewHost(socket.address)}:${listener.port}/`,
       matchedBy
     })
     claimedPorts.add(listener.port)
   }
 
-  // Reading a process's cwd costs a subprocess each, so only ports that could
-  // plausibly be a dev server are inspected. Everything below 1024 is a system
-  // service, and the high ephemeral range is outbound traffic.
-  const plausible = listeners.filter((entry) => entry.port >= 1024 && entry.port < 49152)
+  // Only ports that could plausibly be a dev server are inspected. Everything
+  // below 1024 is a system service, and the high ephemeral range is outbound
+  // traffic.
+  const inRange = listeners.filter((entry) => entry.port >= 1024 && entry.port < 49152)
+
+  // One socket per port, and never a port two unrelated processes share: its
+  // preview would show whichever bound the more specific address, which may
+  // not be the project it is attributed to.
+  const table = await processTable()
+  const byPort = new Map<number, Listener>()
+  const shared = new Set<number>()
+  for (const entry of inRange) {
+    const first = byPort.get(entry.port)
+    if (!first) {
+      byPort.set(entry.port, entry)
+      continue
+    }
+    if (entry.pid !== first.pid && !belongsTo(entry.pid, first.pid, table) && !belongsTo(first.pid, entry.pid, table)) {
+      shared.add(entry.port)
+    }
+    // Prefer the explicit IPv4 loopback socket; that is what a browser reaches.
+    if (entry.address === '127.0.0.1') byPort.set(entry.port, entry)
+  }
+  const plausible = [...byPort.values()].filter((entry) => !shared.has(entry.port))
+
+  // Every cwd and command line in two subprocesses, not two per listener.
+  const pids = plausible.map((entry) => entry.pid)
+  const [cwds, commands] = await Promise.all([workingDirectories(pids), commandLines(pids)])
 
   // --- 1. working directory
   for (const listener of plausible) {
     if (claimedPorts.has(listener.port)) continue
-    const cwd = processWorkingDirectory(listener.pid)
+    const cwd = cwds.get(listener.pid)
     if (!cwd) continue
 
     // Deepest project first, so a monorepo's app matches before its root.
@@ -121,7 +142,7 @@ export async function findExternalServers(
   // --- 2. command line
   for (const listener of plausible) {
     if (claimedPorts.has(listener.port)) continue
-    const commandLine = processCommandLine(listener.pid)
+    const commandLine = commands.get(listener.pid)
     if (!commandLine) continue
 
     const match = candidates
@@ -149,7 +170,7 @@ export async function findExternalServers(
     // If the working directory is readable and belongs somewhere else, the
     // port match is a coincidence. Only trust the port when cwd is unknown,
     // which is the Windows case.
-    const cwd = processWorkingDirectory(listener.pid)
+    const cwd = cwds.get(listener.pid)
     if (cwd && !isWithin(cwd, project.path)) continue
 
     record(project, listener, 'pinnedPort')

@@ -156,7 +156,7 @@ function Row({
   action: React.ReactNode
   onOpenProject?: () => void
 }): React.JSX.Element {
-  const url = `http://127.0.0.1:${entry.port}/`
+  const url = entry.url
 
   return (
     <div className="group flex items-center gap-[10px] rounded-card px-[8px] py-[7px] hover:bg-[var(--surface-hover)]">

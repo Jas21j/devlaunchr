@@ -158,6 +158,8 @@ export interface ListeningPort {
   command: string
   address: string
   user: string
+  /** Where a browser reaches this socket: its own address, not "localhost". */
+  url: string
   /** Set when this port belongs to a project devLaunchr started. */
   projectId: string | null
   projectName: string | null

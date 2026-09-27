@@ -14,11 +14,13 @@ import { inspectDependencies, portFromCommand } from './dependencies'
 import { missingRequirements } from './requirements'
 import { clearToolCache } from './toolchain'
 import {
-  isProcessAlive, killProcessTree, processGroupOf, shellFor, SUPPORTS_PROCESS_GROUPS
+  isProcessAlive, killProcessTree, shellFor, SUPPORTS_PROCESS_GROUPS
 } from './platform'
 import { diagnose, isDesktopApp } from './diagnostics'
 import { findExternalServers } from './adoption'
-import { listListeners } from './ports'
+import { describeHolder, resolveOwnership } from './ownership'
+import { invalidate as invalidateProcessView } from './processTable'
+import { effectiveCommand, pinnedPortOf, substitutePort } from './frameworkPorts'
 
 const SIGKILL_GRACE_MS = 5000
 const LOG_FLUSH_MS = 60
@@ -267,11 +269,14 @@ function portAlreadyInUse(logs: string): number | null {
   return null
 }
 
-/** Who is holding a port, so the error can name it instead of guessing. */
-async function findHolder(port: number): Promise<{ pid: number; command: string } | null> {
+/**
+ * Who is holding a port, so the error can name it instead of guessing. When
+ * our own child is one of the holders, the stranger is the one worth naming.
+ */
+async function findHolder(port: number, childPid?: number | null): Promise<{ pid: number; command: string } | null> {
   try {
-    const listeners = await listListeners()
-    const match = listeners.find((entry) => entry.port === port)
+    const owner = await resolveOwnership(port, childPid ?? null, { fresh: true })
+    const match = owner.foreign[0] ?? owner.ours[0]
     return match ? { pid: match.pid, command: match.command } : null
   } catch {
     return null
@@ -487,16 +492,41 @@ export async function start(
   emitState(runtime)
 
   let port: number
-  try {
-    port = await ports.allocate(
-      project.id,
-      project.preferredPort,
-      settings.portRangeStart,
-      settings.portRangeEnd
-    )
-  } catch (error) {
-    fail(runtime, error instanceof Error ? error.message : String(error))
-    return
+  // A project that names its own port will use it whatever we assign, so that
+  // port is checked, exclusively, before anything is spawned. Otherwise the
+  // collision surfaces as a timeout on a port the project never meant to use.
+  const pinned = pinnedPortOf(project)
+  if (pinned) {
+    invalidateProcessView()
+    const reservedBy = ports.ownerOf(pinned.port)
+    if ((reservedBy !== undefined && reservedBy !== project.id) || !(await ports.isPortFree(pinned.port))) {
+      const holder = await findHolder(pinned.port)
+      const where = pinned.source === 'script'
+        ? `the "${pinned.script}" script in package.json`
+        : `this project's start command`
+      runtime.conflict = { port: pinned.port, pid: holder?.pid ?? null, command: holder?.command ?? null, hardcoded: true }
+      fail(
+        runtime,
+        `This project always uses port ${pinned.port}, and ${describeHolder(holder ?? undefined)} is already ` +
+          `listening on it, so its preview would show that site. devLaunchr did not start that process. ` +
+          `Stop it, or change the fixed port in ${where} to $PORT so devLaunchr can assign a free one.`
+      )
+      return
+    }
+    port = pinned.port
+    ports.claim(project.id, port, null)
+  } else {
+    try {
+      port = await ports.allocate(
+        project.id,
+        project.preferredPort,
+        settings.portRangeStart,
+        settings.portRangeEnd
+      )
+    } catch (error) {
+      fail(runtime, error instanceof Error ? error.message : String(error))
+      return
+    }
   }
 
   runtime.port = port
@@ -549,12 +579,15 @@ async function startProcess(
     ...project.env
   }
 
-  queueLog(runtime, 'system', `$ ${project.startCommand}`)
+  // The framework contract (explicit port and loopback host for Vite, Astro,
+  // Next, Nuxt) and the port number itself, spelled out so every shell agrees.
+  const command = substitutePort(effectiveCommand(project), port)
+  queueLog(runtime, 'system', `$ ${command}`)
   queueLog(runtime, 'system', `cwd: ${project.path} · PORT=${port}`)
 
   let child: ChildProcess
   try {
-    const shell = shellFor(project.startCommand)
+    const shell = shellFor(command)
     child = spawn(shell.file, shell.args, {
       cwd: project.path,
       env,
@@ -579,6 +612,7 @@ async function startProcess(
 
   runtime.child = child
   runtime.pid = child.pid
+  invalidateProcessView()
   emitState(runtime)
 
   ledger.record({
@@ -600,7 +634,11 @@ async function startProcess(
   })
 
   child.on('exit', (code, signal) => {
+    invalidateProcessView()
     ledger.forget(child.pid ?? -1)
+    // A child abandoned after a failed start was already reported, and a retry
+    // may have replaced it; its exit must not touch the new state.
+    if (abandoned.has(child)) return
     runtime.child = null
     runtime.pid = null
 
@@ -657,13 +695,28 @@ async function startProcess(
     getPort: () => runtime.port ?? port,
     timeoutMs: settings.healthCheckTimeoutMs,
     isAlive: () => runtime.child !== null,
-    signal: runtime.health
+    signal: runtime.health,
+    verify: async (checked) => {
+      const owner = await resolveOwnership(checked, child.pid, { fresh: true })
+      return { verdict: owner.verdict, host: owner.host }
+    }
   })
 
   if (result.reason === 'cancelled' || runtime.stopping) return
   if (!result.ok) {
     // An exit was already reported by the exit handler; do not double-report.
     if (result.reason === 'exited') return
+    if (result.reason === 'foreign') {
+      const busy = result.port ?? runtime.port ?? port
+      queueLog(runtime, 'system', `Port ${busy} is answering, but not only from this project`)
+      // Name the stranger while our half of the port is still visible, then
+      // end our server: left running it would keep the port bound.
+      const holder = await findHolder(busy, child.pid)
+      await abandonChild(runtime, child)
+      await reportPortConflict(runtime, project, busy, settings, holder)
+      return
+    }
+    await abandonChild(runtime, child)
     fail(
       runtime,
       `No response on port ${runtime.port} after ${Math.round(settings.healthCheckTimeoutMs / 1000)}s.`
@@ -671,49 +724,16 @@ async function startProcess(
     return
   }
 
-  // Something answered on that port — but prove it is ours before showing it
-  // as this project's preview. Our children are spawned as process-group
-  // leaders, so a listener that belongs to us reports our child's pid as its
-  // process group.
-  const owned = await portBelongsToUs(runtime.port ?? port, child.pid)
-  if (!owned) {
-    queueLog(
-      runtime,
-      'system',
-      `Port ${runtime.port} is answering, but the process holding it is not this project`
-    )
-    await reportPortConflict(runtime, project, runtime.port ?? port, settings)
-    return
-  }
-
+  // The preview connects to the exact address this project's own server bound,
+  // never to "whatever answers on localhost".
   const host = result.host === '::1' ? '[::1]' : (result.host ?? '127.0.0.1')
   runtime.status = 'running'
-  runtime.url = `http://${host}:${runtime.port}/`
+  runtime.url = `http://${host}:${result.port ?? runtime.port}/`
+  if (!result.verified) {
+    queueLog(runtime, 'system', 'Could not confirm which process owns the port (the OS did not say); trusting the reservation')
+  }
   queueLog(runtime, 'system', `Ready at ${runtime.url}`)
   emitState(runtime)
-}
-
-/**
- * Whether the process listening on a port belongs to the group we started.
- *
- * Returns true when it cannot tell — on Windows there are no process groups,
- * and refusing to start on an inconclusive check would be worse than trusting
- * it.
- */
-async function portBelongsToUs(port: number, childPid: number | undefined): Promise<boolean> {
-  if (!SUPPORTS_PROCESS_GROUPS || !childPid) return true
-
-  try {
-    const listeners = await listListeners()
-    const holders = listeners.filter((entry) => entry.port === port)
-    if (holders.length === 0) return true // nothing to contradict us
-
-    return holders.some(
-      (entry) => entry.pid === childPid || processGroupOf(entry.pid) === childPid
-    )
-  } catch {
-    return true
-  }
 }
 
 /** Announced ports currently being verified, so one log line is checked once. */
@@ -739,18 +759,27 @@ async function considerAnnouncedPort(runtime: Runtime, announced: number): Promi
     if (runtime.stopping || runtime.child === null) return
 
     const childPid = runtime.child.pid
-    const mine = await portBelongsToUs(announced, childPid)
-    if (!mine) {
-      const holder = await findHolder(announced)
+    const owner = await resolveOwnership(announced, childPid, { fresh: true })
+    if (owner.verdict === 'foreign') {
       queueLog(
         runtime,
         'system',
-        `This project announced port ${announced}, but ${
-          holder ? `${holder.command} (pid ${holder.pid})` : 'another process'
-        } holds it — not following it`
+        `This project announced port ${announced}, but ${describeHolder(owner.foreign[0])} holds it; not following it`
       )
       return
     }
+    if (owner.verdict === 'shared') {
+      // Our server really is on that port, but so is someone else's, on a
+      // different address. Follow it so the health check can report the
+      // conflict by name; it will never be shown as a preview.
+      queueLog(
+        runtime,
+        'system',
+        `This project is listening on port ${announced}, but ${describeHolder(owner.foreign[0])} is too; ` +
+          `localhost would show that site instead`
+      )
+    }
+    if (owner.verdict === 'none') return
 
     if (runtime.port === announced) return
     queueLog(
@@ -815,10 +844,11 @@ async function reportPortConflict(
   runtime: Runtime,
   project: Project,
   port: number,
-  settings: Settings
+  settings: Settings,
+  knownHolder?: { pid: number; command: string } | null
 ): Promise<void> {
-  const holder = await findHolder(port)
-  const { honorsEnv } = portFromCommand(project.startCommand)
+  const holder = knownHolder !== undefined ? knownHolder : await findHolder(port, runtime.child?.pid ?? null)
+  const { honorsEnv } = portFromCommand(effectiveCommand(project))
   const assigned = runtime.port
 
   // If the project uses the port we gave it, the collision is a race we can
@@ -842,7 +872,7 @@ async function reportPortConflict(
     hardcoded
   }
 
-  const owner = holder ? `${holder.command} (pid ${holder.pid})` : 'another process'
+  const owner = describeHolder(holder ?? undefined)
   fail(
     runtime,
     hardcoded
@@ -916,6 +946,27 @@ export async function stop(project: Project): Promise<void> {
   runtime.stopping = false
   queueLog(runtime, 'system', 'Stopped')
   emitState(runtime)
+}
+
+/** Children ended by devLaunchr after their start was already judged a failure. */
+const abandoned = new WeakSet<ChildProcess>()
+
+/**
+ * Ends a child whose start has failed (its port turned out to be shared, or
+ * it never answered) so it does not keep a port bound behind a "crashed"
+ * status. Its exit is then ignored: the failure has already been reported.
+ */
+async function abandonChild(runtime: Runtime, child: ChildProcess): Promise<void> {
+  abandoned.add(child)
+  if (runtime.child === child) {
+    runtime.child = null
+    runtime.pid = null
+  }
+  if (child.pid && child.exitCode === null && child.signalCode === null) {
+    await killGroup(runtime, child.pid)
+  }
+  ledger.forget(child.pid ?? -1)
+  invalidateProcessView()
 }
 
 /**

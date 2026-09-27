@@ -1,6 +1,6 @@
 {
   "name": "devlaunchr",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A local dev portal for macOS, Windows, and Linux: find every web project on your machine, start it, preview it, and never leave an orphaned process behind.",
   "main": "./out/main/index.js",
   "author": {
@@ -19,7 +19,8 @@
     "dist": "npm run build && electron-builder --publish never",
     "smoke:store": "node scripts/run-smoke.mjs store",
     "smoke:runtime": "node scripts/run-smoke.mjs runtime",
-    "smoke": "npm run smoke:store && npm run smoke:runtime && npm run smoke:thumbs",
+    "smoke:ports": "node scripts/run-smoke.mjs ports",
+    "smoke": "npm run smoke:store && npm run smoke:runtime && npm run smoke:ports && npm run smoke:thumbs",
     "brand": "node scripts/make-brand.mjs",
     "smoke:thumbs": "node scripts/run-smoke.mjs thumbs",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
