@@ -124,8 +124,14 @@ export async function waitForHealthy({
         return { ok: true, host, reason: 'healthy', port, verified: check.verdict === 'ours' }
       }
 
-      // Someone else is answering on this port. Give our child a moment to
-      // either take it properly or move elsewhere and say so.
+      // Our server and a stranger's on one port, on different addresses. No
+      // amount of waiting separates them.
+      if (check.verdict === 'shared') {
+        return { ok: false, host: null, reason: 'foreign', port, verified: true }
+      }
+
+      // Only someone else is answering on this port. Give our child a moment
+      // to either take it properly or move elsewhere and say so.
       if (foreignPort !== port) {
         foreignPort = port
         foreignSince = Date.now()

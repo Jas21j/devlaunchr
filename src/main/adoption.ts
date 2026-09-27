@@ -2,7 +2,6 @@ import { realpathSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import type { Project } from '@shared/types'
 import type { Listener } from './ports'
-import { portFromCommand } from './dependencies'
 import { belongsTo, commandLines, listeners as readListeners, processTable, workingDirectories } from './processTable'
 import { previewHost } from './ownership'
 
@@ -17,7 +16,7 @@ export interface ExternalServer {
   command: string
   url: string
   /** How the process was matched to the project, strongest first. */
-  matchedBy: 'cwd' | 'commandLine' | 'pinnedPort'
+  matchedBy: 'cwd' | 'commandLine'
 }
 
 /**
@@ -72,8 +71,11 @@ function mentions(commandLine: string, path: string): boolean {
  *   2. The project's path appears in the process's command line. Covers
  *      Windows, where a process's cwd is not cheaply readable, and wrappers
  *      that change directory before exec.
- *   3. The project pins a port in its own start command and that port is
- *      listening. Weakest, and only used when nothing else claimed it.
+ *
+ * A listener on the port a project pins for itself is deliberately NOT
+ * evidence. Where cwd cannot be read, that guess attributed whatever held the
+ * port to the project, and its preview showed another site. Such a project
+ * is instead refused at start with the holder named.
  */
 export async function findExternalServers(
   projects: Project[],
@@ -160,31 +162,6 @@ export async function findExternalServers(
       .filter((project) => !found.has(project.id) && mentions(commandLine, project.path))
       .sort((a, b) => b.path.length - a.path.length)[0]
     if (match) record(match, listener, 'commandLine')
-  }
-
-  // --- 3. a port the project pins for itself
-  //
-  // Only a port written into the project's own start command counts. An
-  // assigned `preferredPort` is devLaunchr's bookkeeping, not evidence about
-  // who is listening — using it would adopt whatever happened to hold that
-  // number and attribute a stranger's server to this project.
-  for (const project of candidates) {
-    if (found.has(project.id)) continue
-
-    const pinned = portFromCommand(project.startCommand)
-    if (pinned.honorsEnv || pinned.port === null) continue
-    if (claimedPorts.has(pinned.port)) continue
-
-    const listener = plausible.find((entry) => entry.port === pinned.port)
-    if (!listener) continue
-
-    // If the working directory is readable and belongs somewhere else, the
-    // port match is a coincidence. Only trust the port when cwd is unknown,
-    // which is the Windows case.
-    const cwd = cwds.get(listener.pid)
-    if (cwd && !isWithin(cwd, project.path)) continue
-
-    record(project, listener, 'pinnedPort')
   }
 
   return [...found.values()]

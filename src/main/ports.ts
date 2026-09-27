@@ -47,7 +47,9 @@ function listWindows(): Promise<Listener[]> {
   return new Promise((resolve) => {
     execFile(
       'netstat',
-      ['-ano', '-p', 'TCP'],
+      // No -p filter: `-p TCP` lists IPv4 only, which hid every ::1 socket
+      // and with it every port shared across address families.
+      ['-ano'],
       { timeout: 8000, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8', windowsHide: true },
       (_error, stdout) => {
         if (!stdout) return resolve([])

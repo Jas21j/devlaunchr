@@ -478,7 +478,9 @@ void app.whenReady().then(async () => {
   // server is recognised by its project path on the command line instead.
   const externalProc = spawn(process.execPath, [IS_WIN ? join(externalDir, 'server.js') : 'server.js'], {
     cwd: externalDir,
-    env: { ...process.env, PORT: '3455' },
+    // Run as plain Node, the way a terminal would; as Electron it would need
+    // a display and, on Linux CI, a sandbox exemption.
+    env: { ...process.env, PORT: '3455', ELECTRON_RUN_AS_NODE: '1' },
     stdio: 'ignore',
     detached: true
   })

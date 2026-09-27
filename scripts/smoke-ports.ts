@@ -19,9 +19,12 @@ const scratch = mkdtempSync(join(tmpdir(), 'devlaunchr-ports-'))
 app.setPath('userData', mkdtempSync(join(tmpdir(), 'devlaunchr-ports-data-')))
 
 let failures = 0
+/** Set per case, so a failure can print what devLaunchr logged for it. */
+let logsOf: (() => string[]) | null = null
 const check = (label: string, condition: boolean, detail = ''): void => {
   if (!condition) failures++
   console.log(`${condition ? '  ok  ' : ' FAIL '} ${label}${detail ? ` — ${detail}` : ''}`)
+  if (!condition && logsOf) for (const line of logsOf().slice(-12)) console.log(`         | ${line}`)
 }
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -86,6 +89,7 @@ void app.whenReady().then(async () => {
 
   // ------------------- 2. preferred port is taken on 127.0.0.1 by another site
   const a = project('a', makeServer('a', `server.listen(port, () => console.log('Local: http://localhost:' + port + '/'))`), 'node server.js', p1)
+  logsOf = () => runtime.getLogs(a.id).map((line) => line.text)
   await runtime.start(a, SETTINGS)
   const sa = runtime.getState('a')
   check('project avoids a port another site holds on 127.0.0.1', sa.port !== p1, String(sa.port))
@@ -95,6 +99,7 @@ void app.whenReady().then(async () => {
 
   // ---------- 3. project hardcodes the other site's port and binds wildcard
   const b = project('b', makeServer('b', `server.listen({ port, host: '0.0.0.0' })`), `node server.js --port ${p1}`)
+  logsOf = () => runtime.getLogs(b.id).map((line) => line.text)
   await runtime.start(b, SETTINGS)
   await sleep(300)
   const sb = runtime.getState('b')
@@ -106,6 +111,7 @@ void app.whenReady().then(async () => {
 
   // ------------- 4. project hardcodes the other site's port and binds ::1
   const c = project('c', makeServer('c', `server.listen({ port, host: '::1' })`), `node server.js --port ${p1}`)
+  logsOf = () => runtime.getLogs(c.id).map((line) => line.text)
   await runtime.start(c, SETTINGS)
   await sleep(300)
   const sc = runtime.getState('c')
@@ -119,6 +125,7 @@ void app.whenReady().then(async () => {
 const real = port + 7
 console.log('  ➜  Local:   http://localhost:${p1}/')
 server.listen(real, () => console.log('actually listening on port ' + real))`), 'node server.js')
+  logsOf = () => runtime.getLogs(d.id).map((line) => line.text)
   await runtime.start(d, SETTINGS)
   const sd = runtime.getState('d')
   check('a false announcement is not followed', sd.port !== p1, String(sd.port))
@@ -129,6 +136,7 @@ server.listen(real, () => console.log('actually listening on port ' + real))`), 
   //        port, and announces it. The exact shape of the reported bug.
   const e = project('e', makeServer('e', `
 server.listen({ port: ${p1}, host: '::1' }, () => console.log('  ➜  Local:   http://localhost:${p1}/'))`), 'node server.js')
+  logsOf = () => runtime.getLogs(e.id).map((line) => line.text)
   await runtime.start(e, SETTINGS)
   await sleep(300)
   const se = runtime.getState('e')
@@ -150,6 +158,7 @@ server.listen({ port: ${p1}, host: '::1' }, () => console.log('  ➜  Local:   h
   mkdirSync(join(wDir, 'node_modules'), { recursive: true })
   const w = project('w', wDir, 'npm run dev')
   const began = Date.now()
+  logsOf = () => runtime.getLogs(w.id).map((line) => line.text)
   await runtime.start(w, SETTINGS)
   const sw = runtime.getState('w')
   const wBody = sw.url ? await fetchBody(sw.url) : 'no preview'
@@ -162,6 +171,7 @@ server.listen({ port: ${p1}, host: '::1' }, () => console.log('  ➜  Local:   h
 
   // --- 8. the same project with its port free runs on that port, and only it
   const w2 = project('w2', wDir, 'npm run dev')
+  logsOf = () => runtime.getLogs(w2.id).map((line) => line.text)
   await runtime.start(w2, SETTINGS)
   const sw2 = runtime.getState('w2')
   check('a free script-pinned port is used directly', sw2.status === 'running' && sw2.port === p7, `${sw2.status} ${sw2.port}`)
@@ -170,6 +180,8 @@ server.listen({ port: ${p1}, host: '::1' }, () => console.log('  ➜  Local:   h
 
   f1.close()
   f1b.close()
+
+  logsOf = null
 
   // ------------------------------------ 9. framework port injection
   const pkgDir = (name: string, pkg: object): string => {

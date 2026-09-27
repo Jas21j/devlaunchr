@@ -32,23 +32,43 @@ function run(file: string, args: string[], timeout = 8000): Promise<string> {
 
 // ------------------------------------------------------------- listeners
 
-let listenerCache: { at: number; data: Listener[] } | null = null
-let listenerInflight: Promise<Listener[]> | null = null
+/**
+ * A lookup shared by everyone who asks while it runs, and cached afterwards.
+ * Age is measured from when the lookup *started*: a caller asking for data no
+ * older than N ms must never be handed a lookup that began before it asked,
+ * or a socket bound a moment ago would be missing from the answer.
+ */
+function snapshot<T>(read: () => Promise<T>, fallback: () => T) {
+  let cache: { at: number; data: T } | null = null
+  let inflight: { at: number; promise: Promise<T> } | null = null
+  return {
+    get(maxAgeMs: number): Promise<T> {
+      const now = Date.now()
+      if (cache && now - cache.at <= maxAgeMs) return Promise.resolve(cache.data)
+      if (inflight && now - inflight.at <= maxAgeMs) return inflight.promise
+      const at = now
+      const promise = read()
+        .catch(fallback)
+        .then((data) => {
+          if (!cache || cache.at <= at) cache = { at, data }
+          if (inflight?.promise === promise) inflight = null
+          return data
+        })
+      inflight = { at, promise }
+      return promise
+    },
+    clear(): void {
+      cache = null
+      inflight = null
+    }
+  }
+}
+
+const listenerView = snapshot(listListeners, () => [] as Listener[])
 
 /** Every listening TCP socket, at most `maxAgeMs` old. */
 export function listeners(maxAgeMs = LISTENER_TTL_MS): Promise<Listener[]> {
-  if (listenerCache && Date.now() - listenerCache.at <= maxAgeMs) {
-    return Promise.resolve(listenerCache.data)
-  }
-  if (listenerInflight) return listenerInflight
-  listenerInflight = listListeners()
-    .catch(() => [] as Listener[])
-    .then((data) => {
-      listenerCache = { at: Date.now(), data }
-      listenerInflight = null
-      return data
-    })
-  return listenerInflight
+  return listenerView.get(maxAgeMs)
 }
 
 // --------------------------------------------------------- process table
@@ -59,9 +79,6 @@ export interface ProcessInfo {
   /** Process group; null on Windows, which has no equivalent. */
   pgid: number | null
 }
-
-let tableCache: { at: number; data: Map<number, ProcessInfo> } | null = null
-let tableInflight: Promise<Map<number, ProcessInfo>> | null = null
 
 async function readTable(): Promise<Map<number, ProcessInfo>> {
   const table = new Map<number, ProcessInfo>()
@@ -86,17 +103,10 @@ async function readTable(): Promise<Map<number, ProcessInfo>> {
   return table
 }
 
+const tableView = snapshot(readTable, () => new Map<number, ProcessInfo>())
+
 export function processTable(maxAgeMs = TABLE_TTL_MS): Promise<Map<number, ProcessInfo>> {
-  if (tableCache && Date.now() - tableCache.at <= maxAgeMs) return Promise.resolve(tableCache.data)
-  if (tableInflight) return tableInflight
-  tableInflight = readTable()
-    .catch(() => new Map<number, ProcessInfo>())
-    .then((data) => {
-      tableCache = { at: Date.now(), data }
-      tableInflight = null
-      return data
-    })
-  return tableInflight
+  return tableView.get(maxAgeMs)
 }
 
 /**
@@ -119,8 +129,8 @@ export function belongsTo(pid: number, root: number, table: Map<number, ProcessI
 
 /** Drops every cached view. Called whenever something starts or stops. */
 export function invalidate(): void {
-  listenerCache = null
-  tableCache = null
+  listenerView.clear()
+  tableView.clear()
 }
 
 // ------------------------------------------- batched per-process details

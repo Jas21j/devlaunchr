@@ -76,7 +76,7 @@ export interface ExternalOwner {
   pid: number
   command: string
   /** How devLaunchr recognised it: working directory, command line, or port. */
-  matchedBy: 'cwd' | 'commandLine' | 'pinnedPort'
+  matchedBy: 'cwd' | 'commandLine'
 }
 
 export interface PortConflict {
