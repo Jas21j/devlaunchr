@@ -34,5 +34,11 @@ await build({
   logLevel: 'warning'
 })
 
-const result = spawnSync(electron, [outfile], { stdio: 'inherit' })
+// GitHub's Linux runners ship Chromium's SUID sandbox helper unconfigured,
+// which aborts Electron before the first line of the suite runs.
+const args = process.platform === 'linux' && process.env.CI ? [outfile, '--no-sandbox'] : [outfile]
+
+// A suite that hangs should fail, not hold a CI runner for six hours.
+const result = spawnSync(electron, args, { stdio: 'inherit', timeout: 10 * 60_000, killSignal: 'SIGKILL' })
+if (result.error) console.error(`smoke:${name} did not finish: ${result.error.message}`)
 process.exit(result.status ?? 1)

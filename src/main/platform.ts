@@ -20,7 +20,10 @@ export function shellFor(command: string): { file: string; args: string[] } {
         ? process.env['COMSPEC']
         : 'powershell.exe',
       // -NoProfile keeps a user's profile banner out of the parsed output.
-      args: ['-NoProfile', '-NonInteractive', '-Command', command]
+      // PowerShell reports 1 for any failed native command unless told to
+      // pass its real exit code on; the newline keeps a trailing # comment in
+      // the command from swallowing that.
+      args: ['-NoProfile', '-NonInteractive', '-Command', `${command}\nif ($LASTEXITCODE) { exit $LASTEXITCODE }`]
     }
   }
 
@@ -57,29 +60,39 @@ export function isProcessAlive(pid: number): boolean {
  * Refuses any pid at or below 1: `kill(-0)` signals the caller's own process
  * group, which would take down the app itself.
  */
-export function killProcessTree(pid: number, force: boolean): void {
-  if (!Number.isInteger(pid) || pid <= 1) return
+export function killProcessTree(pid: number, force: boolean): Promise<boolean> {
+  if (!Number.isInteger(pid) || pid <= 1) return Promise.resolve(false)
 
   if (IS_WINDOWS) {
-    // /T includes the whole tree; /F is the hard kill.
+    // /T includes the whole tree; /F is the hard kill. taskkill does its work
+    // before it exits, so waiting for it means the tree is gone on return,
+    // and its exit code says whether a polite request was even possible
+    // (console servers like node refuse one outright).
     const args = ['/PID', String(pid), '/T']
     if (force) args.push('/F')
-    try {
-      spawn('taskkill', args, { stdio: 'ignore', windowsHide: true }).unref()
-    } catch {
-      // Nothing more we can do; the caller re-checks liveness.
-    }
-    return
+    return new Promise((resolve) => {
+      try {
+        const child = spawn('taskkill', args, { stdio: 'ignore', windowsHide: true })
+        child.once('error', () => resolve(false))
+        child.once('exit', (code) => resolve(code === 0))
+      } catch {
+        // Nothing more we can do; the caller re-checks liveness.
+        resolve(false)
+      }
+    })
   }
 
   const signal = force ? 'SIGKILL' : 'SIGTERM'
   try {
     process.kill(-pid, signal)
+    return Promise.resolve(true)
   } catch {
     try {
       process.kill(pid, signal)
+      return Promise.resolve(true)
     } catch {
       // Already gone.
+      return Promise.resolve(false)
     }
   }
 }

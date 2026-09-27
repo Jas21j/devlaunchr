@@ -46,6 +46,17 @@ function isWithin(child: string, parent: string): boolean {
 }
 
 /**
+ * Whether a command line names a project folder. The folder can appear in more
+ * than one spelling: resolved through symlinks, as typed, or on Windows as an
+ * 8.3 short path (C:\Users\RUNNER~1) in either case.
+ */
+function mentions(commandLine: string, path: string): boolean {
+  const fold = (value: string): string => (process.platform === 'win32' ? value.toLowerCase() : value)
+  const haystack = fold(commandLine)
+  return [canonical(path), resolve(path).replace(/[/\\]+$/, '')].some((form) => haystack.includes(fold(form)))
+}
+
+/**
  * Finds projects that are already serving, without devLaunchr having started
  * them.
  *
@@ -146,7 +157,7 @@ export async function findExternalServers(
     if (!commandLine) continue
 
     const match = candidates
-      .filter((project) => !found.has(project.id) && commandLine.includes(canonical(project.path)))
+      .filter((project) => !found.has(project.id) && mentions(commandLine, project.path))
       .sort((a, b) => b.path.length - a.path.length)[0]
     if (match) record(match, listener, 'commandLine')
   }

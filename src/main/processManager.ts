@@ -979,16 +979,24 @@ async function killGroup(runtime: Runtime, pid: number): Promise<void> {
   // kill(-0) would signal devLaunchr's own process group.
   if (!Number.isInteger(pid) || pid <= 1) return
 
-  killProcessTree(pid, false)
-
-  const deadline = Date.now() + SIGKILL_GRACE_MS
-  while (Date.now() < deadline) {
-    if (!isProcessAlive(pid)) return
-    await new Promise((resolve) => setTimeout(resolve, 120))
+  // A refused polite request (a Windows console server) will not be honoured
+  // later either, so there is no grace period to wait out.
+  if (await killProcessTree(pid, false)) {
+    const deadline = Date.now() + SIGKILL_GRACE_MS
+    while (Date.now() < deadline) {
+      if (!isProcessAlive(pid)) return
+      await new Promise((resolve) => setTimeout(resolve, 120))
+    }
+    queueLog(runtime, 'system', `Did not exit in ${SIGKILL_GRACE_MS / 1000}s - forcing it`)
   }
+  if (!isProcessAlive(pid)) return
+  await killProcessTree(pid, true)
 
-  queueLog(runtime, 'system', `Did not exit in ${SIGKILL_GRACE_MS / 1000}s - forcing it`)
-  killProcessTree(pid, true)
+  // SIGKILL is not instant; stop() promises the process is gone on return.
+  const settle = Date.now() + 2000
+  while (isProcessAlive(pid) && Date.now() < settle) {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
 }
 
 function composeDown(runtime: Runtime, project: Project): Promise<void> {

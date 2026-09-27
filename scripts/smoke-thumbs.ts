@@ -37,6 +37,12 @@ function distinctColours(buffer: Buffer): number {
   return seen.size
 }
 
+// A thrown error must fail the run, not leave Electron waiting forever.
+process.on('unhandledRejection', (error) => {
+  console.error(error)
+  app.exit(1)
+})
+
 void app.whenReady().then(async () => {
   const thumbs = await import('../src/main/thumbnails')
 
@@ -69,8 +75,8 @@ void app.whenReady().then(async () => {
   }
 
   // ------------------------------------------------- recapture throttle
-  // Kept for the provenance checks below, which delete the original.
-  const file2 = file
+  // The bytes are kept for the provenance checks below, which delete the file.
+  const png = existsSync(file) ? readFileSync(file) : Buffer.alloc(0)
   const skipped = await thumbs.capture('proj-capture', 'http://127.0.0.1:3911/')
   check('recapture inside the cooldown is skipped', skipped === false)
   const forced = await thumbs.capture('proj-capture', 'http://127.0.0.1:3911/', { force: true })
@@ -125,9 +131,13 @@ void app.whenReady().then(async () => {
   check('it is still there', thumbs.get('proj-keep') !== null)
 
   // An image with no metadata predates provenance tracking and is unverifiable.
-  writeFileSync(join(app.getPath('userData'), 'thumbnails', 'proj-legacy.png'), readFileSync(file2))
+  writeFileSync(join(app.getPath('userData'), 'thumbnails', 'proj-legacy.png'), png)
   const legacyDropped = thumbs.discardUnverified(new Map([['proj-legacy', null]]))
   check('an image with no recorded origin is discarded', legacyDropped.includes('proj-legacy'))
+
+  // The capture the provenance checks discarded is needed again below.
+  check('a discarded capture can be taken again',
+    await thumbs.capture('proj-capture', 'http://127.0.0.1:3911/', { force: true }))
 
   // ------------------------------------------------------------ forget
   thumbs.forget('proj-disk')

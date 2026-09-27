@@ -6,7 +6,7 @@
  * project, or quitting, leaves nothing behind.
  */
 import { app } from 'electron'
-import { execFileSync, spawn } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -83,6 +83,8 @@ http.createServer((req, res) => res.end('ok')).listen(port, () => {
 })
 `
 
+const IS_WIN = process.platform === 'win32'
+
 const isAlive = (pid: number): boolean => {
   try {
     process.kill(pid, 0)
@@ -92,14 +94,13 @@ const isAlive = (pid: number): boolean => {
   }
 }
 
-const listenersOn = (port: number): string => {
-  try {
-    return execFileSync('lsof', ['-i', `:${port}`, '-sTCP:LISTEN', '-t'], {
-      encoding: 'utf8'
-    }).trim()
-  } catch {
-    return ''
-  }
+/** Pids listening on a port, via the app's own cross-platform scanner. */
+const listenersOn = async (port: number): Promise<string> => {
+  const { listListeners } = await import('../src/main/ports')
+  return (await listListeners())
+    .filter((entry) => entry.port === port)
+    .map((entry) => entry.pid)
+    .join(' ')
 }
 
 void app.whenReady().then(async () => {
@@ -120,7 +121,7 @@ void app.whenReady().then(async () => {
   check('port is inside the configured range', (stateA.port ?? 0) >= 3400 && (stateA.port ?? 0) <= 3499, String(stateA.port))
   check('url is recorded', stateA.url !== null, stateA.url ?? '')
   check('pid is recorded', stateA.pid !== null, String(stateA.pid))
-  check('port actually has a listener', listenersOn(stateA.port ?? 0) !== '')
+  check('port actually has a listener', (await listenersOn(stateA.port ?? 0)) !== '')
 
   const grandchildMatch = /GRANDCHILD_PID=(\d+)/.exec(logsFor('a'))
   const grandchildPid = grandchildMatch ? Number(grandchildMatch[1]) : 0
@@ -143,7 +144,7 @@ void app.whenReady().then(async () => {
     /following it instead of/.test(logsFor('c')),
     String(stateC.port)
   )
-  check('reported port matches the real listener', listenersOn(stateC.port ?? 0) !== '')
+  check('reported port matches the real listener', (await listenersOn(stateC.port ?? 0)) !== '')
 
   // --------------------------------------------------------- group kill
   const portA = stateA.port ?? 0
@@ -153,7 +154,7 @@ void app.whenReady().then(async () => {
   check('status returns to stopped', runtime.getState('a').status === 'stopped')
   check('the server process is gone', !isAlive(pidA))
   check('THE GRANDCHILD IS GONE (group kill)', !isAlive(grandchildPid), `pid ${grandchildPid}`)
-  check('lsof reports nothing on the port', listenersOn(portA) === '')
+  check('nothing listens on the port any more', (await listenersOn(portA)) === '')
 
   // ------------------------------------------------------------- crash
   const d = project('d', normalDir, 'node -e "process.exit(3)"')
@@ -223,7 +224,7 @@ void app.whenReady().then(async () => {
 
   const pipDir = fixture('eco-pip', { 'requirements.txt': 'flask\n' })
   const pipPlan = plan(pipDir, 'python-flask')
-  check('bare requirements.txt creates a virtualenv', /python3 -m venv \.venv/.test(pipPlan.command ?? ''), pipPlan.command ?? '')
+  check('bare requirements.txt creates a virtualenv', /python3? -m venv \.venv/.test(pipPlan.command ?? ''), pipPlan.command ?? '')
   check('and never installs into system python', !/^pip install/.test(pipPlan.command ?? ''))
 
   const venvDir = fixture('eco-venv', { 'requirements.txt': '', ...venvLayout })
@@ -473,7 +474,9 @@ void app.whenReady().then(async () => {
     'server.js': NORMAL_SERVER
   })
 
-  const externalProc = spawn(process.execPath, ['server.js'], {
+  // Windows cannot read another process's cwd, so there a terminal-started
+  // server is recognised by its project path on the command line instead.
+  const externalProc = spawn(process.execPath, [IS_WIN ? join(externalDir, 'server.js') : 'server.js'], {
     cwd: externalDir,
     env: { ...process.env, PORT: '3455' },
     stdio: 'ignore',
@@ -486,8 +489,8 @@ void app.whenReady().then(async () => {
   const adoptedServer = servers.find((entry) => entry.projectId === 'ext')
 
   check('a server started outside devLaunchr is found', adoptedServer !== undefined)
-  check('it is matched by working directory, not guessed from the port',
-    adoptedServer?.matchedBy === 'cwd', adoptedServer?.matchedBy ?? 'none')
+  check('it is matched by evidence, not guessed from the port',
+    adoptedServer?.matchedBy === (IS_WIN ? 'commandLine' : 'cwd'), adoptedServer?.matchedBy ?? 'none')
   check('the real port is reported', adoptedServer?.port === 3455, String(adoptedServer?.port))
   check('the owning process is identified', (adoptedServer?.pid ?? 0) > 0)
 
@@ -565,8 +568,8 @@ void app.whenReady().then(async () => {
   check('reaper killed the real orphan groups', report.reaped.length >= 2, `${report.reaped.length} reaped`)
   check('orphaned server b is gone', !isAlive(pidB), `pid ${pidB}`)
   check('orphaned server c is gone', !isAlive(pidC), `pid ${pidC}`)
-  check('no listener left on b', listenersOn(portB) === '')
-  check('no listener left on c', listenersOn(portC) === '')
+  check('no listener left on b', (await listenersOn(portB)) === '')
+  check('no listener left on c', (await listenersOn(portC)) === '')
   check('pid-recycling guard skipped the mismatched start time', !report.reaped.some((r) => r.projectId === 'fake'))
   check('zero pid was refused', !report.reaped.some((r) => r.projectId === 'zero'))
   check('this very process survived the reaper', isAlive(process.pid))

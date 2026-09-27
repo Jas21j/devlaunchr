@@ -101,9 +101,10 @@ export async function reapOrphans(): Promise<ReapReport> {
       continue
     }
 
-    killProcessTree(entry.pid, false)
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    if (isAlive(entry.pid)) killProcessTree(entry.pid, true)
+    if (await killProcessTree(entry.pid, false)) {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+    }
+    if (isAlive(entry.pid)) await killProcessTree(entry.pid, true)
     reaped.push(entry)
   }
 

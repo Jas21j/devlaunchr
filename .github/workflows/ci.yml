@@ -35,12 +35,26 @@ jobs:
       - name: Build
         run: npx electron-vite build
 
-      # Electron needs a display server to create a BrowserWindow, which the
-      # thumbnail and runtime suites both do.
-      - name: Test (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum npm run smoke
+      # Each suite is its own step, and every step runs even when an earlier
+      # one failed, so one broken suite never hides the state of the others.
+      # Electron needs a display server to create a BrowserWindow; on Linux
+      # that is xvfb.
+      - name: Test store
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: ${{ runner.os == 'Linux' && 'xvfb-run --auto-servernum' || '' }} npm run smoke:store
 
-      - name: Test (macOS and Windows)
-        if: runner.os != 'Linux'
-        run: npm run smoke
+      - name: Test runtime
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: ${{ runner.os == 'Linux' && 'xvfb-run --auto-servernum' || '' }} npm run smoke:runtime
+
+      - name: Test ports
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: ${{ runner.os == 'Linux' && 'xvfb-run --auto-servernum' || '' }} npm run smoke:ports
+
+      - name: Test thumbnails
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: ${{ runner.os == 'Linux' && 'xvfb-run --auto-servernum' || '' }} npm run smoke:thumbs
