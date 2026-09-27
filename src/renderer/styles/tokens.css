@@ -1,0 +1,164 @@
+/*
+ * Design tokens — DESIGN.md palette and type, geometry compressed per
+ * DESIGN-APP.md. Values marked DERIVED are interpolations of the zinc ramp,
+ * not new hues.
+ */
+
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: block;
+  src: url('../assets/fonts/dmsans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: block;
+  src: url('../assets/fonts/dmsans-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  /* Palette — verbatim from DESIGN.md */
+  --color-obsidian: #09090b;
+  --color-graphite: #18181b;
+  --color-slate: #27272a;
+  --color-iron: #3f3f46;
+  --color-steel: #52525b;
+  --color-fog: #71717a;
+  --color-ash: #a1a1aa;
+  --color-mist: #d4d4d8;
+  --color-cloud: #ececee;
+  --color-paper: #f4f4f5;
+  --color-snow: #ffffff;
+  --color-ember: #ff5a00;
+
+  /* Type */
+  --font-sans: 'Cosmica', 'DM Sans', ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+
+  --text-micro: 11px;
+  --text-caption: 12px;
+  --text-ui: 13px;
+  --text-body: 15px;
+  --text-subheading: 18px;
+  --text-section: 22px;
+  --text-display: 28px;
+
+  --leading-tight: 1.2;
+  --leading-ui: 1.35;
+  --leading-body: 1.45;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Spacing — 4px base, compressed scale */
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+
+  /* Geometry — floor of 12px preserved from DESIGN.md */
+  --radius-badge: 12px;
+  --radius-control: 12px;
+  --radius-card: 14px;
+  --radius-panel: 16px;
+  --radius-pill: 10000px;
+
+  /* Chrome */
+  --titlebar-height: 52px;
+  --sidebar-width: 268px;
+
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+/* ---------- Light (default) ---------- */
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --surface-canvas: var(--color-paper);
+  --surface-raised: var(--color-snow);
+  --surface-recessed: #fafafa;
+  --surface-inset: var(--color-paper);
+  --surface-hover: rgba(9, 9, 11, 0.04);
+  --surface-active: rgba(9, 9, 11, 0.07);
+
+  --border-hairline: var(--color-cloud);
+  --border-strong: var(--color-mist);
+
+  --text-primary: var(--color-obsidian);
+  --text-secondary: var(--color-steel);
+  --text-muted: var(--color-fog);
+  --text-placeholder: var(--color-ash);
+  --text-inverse: var(--color-snow);
+
+  --status-running: #2f9e5f;
+  --status-pending: #c2790f;
+  --status-crashed: #c4403a;
+  --status-stopped: var(--color-ash);
+
+  --button-primary-bg: var(--color-obsidian);
+  --button-primary-border: #2c2e34;
+  --button-primary-text: var(--color-snow);
+
+  --shadow-control: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.5),
+    inset 0 9px 14px -5px rgba(117, 123, 133, 0.4), 0 0 0 1px rgb(44, 46, 52),
+    0 2px 4px 0 rgba(0, 0, 0, 0.12);
+  --shadow-overlay: 0 12px 32px -8px rgba(9, 9, 11, 0.22),
+    0 0 0 1px var(--border-hairline);
+}
+
+/* ---------- Dark ---------- */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --surface-canvas: var(--color-graphite);
+  --surface-raised: #1f1f23; /* DERIVED: Graphite → Slate midpoint */
+  --surface-recessed: #161619; /* DERIVED */
+  --surface-inset: #131316; /* DERIVED */
+  --surface-hover: rgba(244, 244, 245, 0.05);
+  --surface-active: rgba(244, 244, 245, 0.09);
+
+  --border-hairline: #2c2c31; /* DERIVED: Cloud's contrast, inverted */
+  --border-strong: #3a3a41; /* DERIVED */
+
+  --text-primary: var(--color-paper);
+  --text-secondary: var(--color-ash);
+  --text-muted: var(--color-fog);
+  --text-placeholder: var(--color-steel);
+  --text-inverse: var(--color-obsidian);
+
+  --status-running: #45b97a;
+  --status-pending: #e0a340;
+  --status-crashed: #e8695f;
+  --status-stopped: var(--color-steel);
+
+  --button-primary-bg: var(--color-paper);
+  --button-primary-border: #d4d4d8;
+  --button-primary-text: var(--color-obsidian);
+
+  --shadow-control: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.14),
+    0 0 0 1px rgba(0, 0, 0, 0.4), 0 2px 4px 0 rgba(0, 0, 0, 0.3);
+  --shadow-overlay: 0 12px 32px -8px rgba(0, 0, 0, 0.6),
+    0 0 0 1px var(--border-hairline);
+}

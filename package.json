@@ -1,0 +1,71 @@
+{
+  "name": "devlaunchr",
+  "version": "0.2.0",
+  "description": "A local dev portal for macOS, Windows, and Linux: find every web project on your machine, start it, preview it, and never leave an orphaned process behind.",
+  "main": "./out/main/index.js",
+  "author": {
+    "name": "devLaunchr contributors",
+    "email": "devlaunchr@users.noreply.github.com"
+  },
+  "license": "MIT",
+  "private": false,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "build": "npm run typecheck && electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder --publish never",
+    "smoke:store": "node scripts/run-smoke.mjs store",
+    "smoke:runtime": "node scripts/run-smoke.mjs runtime",
+    "smoke": "npm run smoke:store && npm run smoke:runtime && npm run smoke:thumbs",
+    "brand": "node scripts/make-brand.mjs",
+    "smoke:thumbs": "node scripts/run-smoke.mjs thumbs",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
+    "prebuild": "node scripts/make-brand.mjs"
+  },
+  "dependencies": {
+    "@electron-toolkit/utils": "4.0.0",
+    "electron-store": "8.2.0",
+    "serve-handler": "^6.1.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/serve-handler": "^6.1.4",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "44.4.3",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vite": "7.3.6",
+    "zustand": "5.0.15"
+  },
+  "keywords": [
+    "electron",
+    "developer-tools",
+    "dev-server",
+    "localhost",
+    "macos",
+    "process-manager"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jas21j/devlaunchr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Jas21j/devlaunchr/issues"
+  },
+  "homepage": "https://github.com/Jas21j/devlaunchr#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "desktopName": "devlaunchr.desktop"
+}

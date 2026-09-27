@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest something devLaunchr should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: Describe the situation you are in, not the solution you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+
+  - type: markdown
+    attributes:
+      value: |
+        Two things devLaunchr will not do, so you know before you write:
+        it makes no network requests to anything but loopback, and it contains
+        no AI or machine learning. Suggestions that need either are out of scope.

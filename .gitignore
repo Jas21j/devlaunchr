@@ -1,0 +1,14 @@
+node_modules/
+out/
+release/
+dist/
+.DS_Store
+*.log
+resources/icon.iconset/
+*.tsbuildinfo
+
+# Generated brand assets — rebuilt by `npm run prebuild` from brand/
+resources/icon.icns
+resources/icon.png
+src/renderer/assets/mark.png
+src/renderer/assets/favicon.png

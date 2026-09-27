@@ -1,0 +1,123 @@
+@import './tokens.css';
+@import 'tailwindcss';
+
+/*
+ * Tailwind reads these as its theme, but each one points at a token that
+ * re-resolves per theme — so `bg-canvas` is correct in light and dark without
+ * a single `dark:` variant anywhere in the components.
+ */
+@theme {
+  --color-canvas: var(--surface-canvas);
+  --color-raised: var(--surface-raised);
+  --color-recessed: var(--surface-recessed);
+  --color-inset: var(--surface-inset);
+  --color-hairline: var(--border-hairline);
+  --color-strong: var(--border-strong);
+
+  --color-ink: var(--text-primary);
+  --color-ink-secondary: var(--text-secondary);
+  --color-ink-muted: var(--text-muted);
+  --color-ink-placeholder: var(--text-placeholder);
+  --color-ink-inverse: var(--text-inverse);
+
+  --color-ember: var(--color-ember);
+  --color-running: var(--status-running);
+  --color-pending: var(--status-pending);
+  --color-crashed: var(--status-crashed);
+  --color-stopped: var(--status-stopped);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --text-micro: var(--text-micro);
+  --text-caption: var(--text-caption);
+  --text-ui: var(--text-ui);
+  --text-body: var(--text-body);
+  --text-subheading: var(--text-subheading);
+  --text-section: var(--text-section);
+  --text-display: var(--text-display);
+
+  --radius-badge: var(--radius-badge);
+  --radius-control: var(--radius-control);
+  --radius-card: var(--radius-card);
+  --radius-panel: var(--radius-panel);
+  --radius-pill: var(--radius-pill);
+}
+
+@layer base {
+  * {
+    border-color: var(--border-hairline);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--surface-canvas);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--text-ui);
+    line-height: var(--leading-ui);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+    /* The window is chrome, not a document — nothing here rubber-bands. */
+    overscroll-behavior: none;
+    user-select: none;
+    cursor: default;
+  }
+
+  /* Text the user will genuinely want to copy: logs, URLs, paths. */
+  .selectable {
+    user-select: text;
+    cursor: text;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--text-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-control);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: var(--radius-pill);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-placeholder);
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  /* The draggable region of the frameless window. */
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Typecheck and tests
+    # The suite spawns real servers and inspects real processes, so it runs on
+    # every platform the app ships to rather than only on Linux.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate brand assets
+        run: npm run prebuild
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npx electron-vite build
+
+      # Electron needs a display server to create a BrowserWindow, which the
+      # thumbnail and runtime suites both do.
+      - name: Test (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm run smoke
+
+      - name: Test (macOS and Windows)
+        if: runner.os != 'Linux'
+        run: npm run smoke

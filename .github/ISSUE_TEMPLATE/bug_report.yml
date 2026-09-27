@@ -1,0 +1,54 @@
+name: Bug report
+description: Something behaves incorrectly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If a project failed to start, the log pane content is usually the whole
+        answer — please paste it rather than describing it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: From the log pane, or the terminal if the app itself failed.
+      render: shell
+
+  - type: input
+    id: project-type
+    attributes:
+      label: Project type
+      placeholder: Vite / Next.js / Django / static / …
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and version
+      placeholder: macOS 15.1 / Windows 11 / Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: devLaunchr version
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: orphan
+    attributes:
+      label: Did it leave a process behind?
+      description: Check with `lsof -i :PORT` on macOS/Linux or `netstat -ano` on Windows.
+      options:
+        - label: A server kept running after I stopped it or quit the app

@@ -1,0 +1,107 @@
+appId: com.devlaunchr.app
+productName: devLaunchr
+copyright: Copyright © 2026 devLaunchr contributors
+
+directories:
+  buildResources: resources
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+
+asar: true
+
+# ------------------------------------------------------------------- macOS
+mac:
+  category: public.app-category.developer-tools
+  icon: resources/icon.icns
+  darkModeSupport: true
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  # Unsigned builds are ad-hoc signed, which is the minimum arm64 needs in
+  # order to launch. Set CSC_LINK / CSC_KEY_PASSWORD in CI to sign properly.
+  identity: null
+  extendInfo:
+    LSMinimumSystemVersion: '13.0'
+
+dmg:
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+  contents:
+    - x: 140
+      y: 190
+      type: file
+    - x: 400
+      y: 190
+      type: link
+      path: /Applications
+
+# ----------------------------------------------------------------- Windows
+win:
+  icon: resources/icon.png
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-${version}-win-${arch}-setup.${ext}
+  shortcutName: devLaunchr
+
+portable:
+  artifactName: ${productName}-${version}-win-${arch}-portable.${ext}
+
+# ------------------------------------------------------------------- Linux
+linux:
+  icon: resources/icon.png
+  category: Development
+  # Without this, desktop environments cannot associate a running window with
+  # the .desktop entry, so the app shows a generic icon in the dock/taskbar.
+  syncDesktopName: true
+  synopsis: Local dev portal — find, start, and preview every web project on your machine
+  desktop:
+    entry:
+      Terminal: 'false'
+      Type: Application
+      Categories: Development;IDE;
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+    - target: rpm
+      arch: [x64]
+
+appImage:
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}
+
+deb:
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}
+  # lsof powers the "what is holding this port" panel.
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libsecret-1-0
+    - lsof
+
+rpm:
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}
+  depends:
+    - lsof
+
+publish:
+  provider: github
+  releaseType: release
