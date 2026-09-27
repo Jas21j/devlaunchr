@@ -40,7 +40,7 @@ Grab the build for your platform from the
 | Windows (portable) | `devLaunchr-*-win-x64-portable.exe` | No install |
 | Linux | `devLaunchr-*-linux-x86_64.AppImage` | `chmod +x`, then run |
 | Debian / Ubuntu | `devLaunchr-*-linux-amd64.deb` | |
-| Fedora / RHEL | `devLaunchr-*-linux-x86_64.rpm` | Built by the release workflow on Linux; not in v0.2.0 |
+| Fedora / RHEL | `devLaunchr-*-linux-x86_64.rpm` | |
 
 Releases are unsigned unless a signing certificate is configured, so macOS will
 warn on first launch — right-click the app and choose Open. Windows SmartScreen
