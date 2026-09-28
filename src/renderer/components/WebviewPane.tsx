@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Project } from '@shared/types'
-import { runtimeOf, useApp } from '../store'
+import { runtimeOf, useApp, isBusy } from '../store'
 import { StatusDot } from './StatusDot'
 import { Button } from './Button'
+import { Icon, type IconName } from './Icon'
+import { Segmented } from './ui'
 
 /**
  * The slice of Electron's WebviewTag API this pane uses. React already types
@@ -24,19 +26,20 @@ interface WebviewElement extends HTMLElement {
   isDevToolsOpened: () => boolean
 }
 
-const DEVICE_PRESETS = [
-  { label: 'Full', width: null },
-  { label: '1024', width: 1024 },
-  { label: '768', width: 768 },
-  { label: '390', width: 390 }
-] as const
+const DEVICE_PRESETS: Array<{ label: string; width: number | null; title: string }> = [
+  { label: 'Full', width: null, title: 'Fill the pane' },
+  { label: '1024', width: 1024, title: 'Laptop, 1024px' },
+  { label: '768', width: 768, title: 'Tablet, 768px' },
+  { label: '390', width: 390, title: 'Phone, 390px' }
+]
 
 export function WebviewPane({
   project,
-  onShowDetails
+  toggle
 }: {
   project: Project
-  onShowDetails: () => void
+  /** The Preview / Overview switch, rendered in this pane's toolbar. */
+  toggle: React.ReactNode
 }): React.JSX.Element {
   const runtime = useApp((s) => runtimeOf(s, project.id))
   const start = useApp((s) => s.start)
@@ -52,7 +55,7 @@ export function WebviewPane({
   const [failure, setFailure] = useState<string | null>(null)
 
   const live = runtime.status === 'running'
-  const busy = runtime.status === 'starting' || runtime.status === 'stopping'
+  const busy = isBusy(runtime.status)
 
   // The webview is only mounted while a server is up, so every listener is
   // attached fresh each time the project starts.
@@ -109,21 +112,17 @@ export function WebviewPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel border border-hairline bg-raised">
-      <header className="flex h-[40px] shrink-0 items-center gap-[6px] border-b border-hairline px-[10px]">
-        <StatusDot status={runtime.status} />
-
-        <IconButton label="Back" disabled={!live || !nav.back} onClick={() => frame.current?.goBack()}>
-          <path d="M9.5 3 L5 7.5 L9.5 12" />
-        </IconButton>
+      <header className="flex h-[44px] shrink-0 items-center gap-[4px] border-b border-hairline px-[8px]">
+        <IconButton icon="chevronLeft" label="Back" disabled={!live || !nav.back} onClick={() => frame.current?.goBack()} />
         <IconButton
+          icon="chevronRight"
           label="Forward"
           disabled={!live || !nav.forward}
           onClick={() => frame.current?.goForward()}
-        >
-          <path d="M5.5 3 L10 7.5 L5.5 12" />
-        </IconButton>
+        />
         <IconButton
-          label={loading ? 'Stop loading' : 'Reload'}
+          icon={loading ? 'close' : 'restart'}
+          label={loading ? 'Stop loading' : 'Reload (Alt-click to bypass the cache)'}
           disabled={!live}
           onClick={(event) => {
             const view = frame.current
@@ -132,49 +131,52 @@ export function WebviewPane({
             if (event.altKey) view.reloadIgnoringCache()
             else view.reload()
           }}
-        >
-          <path d="M12 7.5 A4.5 4.5 0 1 1 10.4 4" />
-          <path d="M12.4 1.6 L12.4 4.4 L9.6 4.4" />
-        </IconButton>
-
-        <input
-          value={address}
-          disabled={!live}
-          spellCheck={false}
-          onFocus={() => setEditing(true)}
-          onBlur={() => {
-            setEditing(false)
-            setAddress(frame.current?.getURL() ?? runtime.url ?? '')
-          }}
-          onChange={(event) => setAddress(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter') return
-            go(address)
-            event.currentTarget.blur()
-          }}
-          className="h-[24px] min-w-0 flex-1 rounded-control border border-hairline bg-recessed px-[9px] font-mono text-micro text-ink placeholder:text-ink-placeholder focus:outline-none disabled:text-ink-placeholder"
-          placeholder={live ? '' : 'Not running'}
         />
 
-        <div className="flex shrink-0 items-center gap-[1px] rounded-control border border-hairline p-[1px]">
-          {DEVICE_PRESETS.map((preset) => (
-            <button
-              key={preset.label}
-              type="button"
-              disabled={!live}
-              onClick={() => setDeviceWidth(preset.width)}
-              className="rounded-[10px] px-[7px] py-[2px] text-micro transition-colors disabled:opacity-40"
-              style={{
-                background: deviceWidth === preset.width ? 'var(--surface-active)' : undefined,
-                color: deviceWidth === preset.width ? 'var(--text-primary)' : 'var(--text-muted)'
-              }}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
+        <label className="relative mx-[4px] flex min-w-0 flex-1 items-center">
+          <span className="pointer-events-none absolute left-[9px]">
+            <StatusDot status={runtime.status} size={6} />
+          </span>
+          <input
+            value={address}
+            disabled={!live}
+            spellCheck={false}
+            aria-label="Address"
+            onFocus={(event) => {
+              setEditing(true)
+              event.currentTarget.select()
+            }}
+            onBlur={() => {
+              setEditing(false)
+              setAddress(frame.current?.getURL() ?? runtime.url ?? '')
+            }}
+            onChange={(event) => setAddress(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') event.currentTarget.blur()
+              if (event.key !== 'Enter') return
+              go(address)
+              event.currentTarget.blur()
+            }}
+            className="field selectable h-[28px] bg-recessed pl-[23px] font-mono text-caption"
+            placeholder={live ? '' : 'Not running'}
+          />
+          {loading && (
+            <span className="absolute inset-x-[8px] bottom-0 h-[2px] overflow-hidden rounded-pill">
+              <span className="block h-full w-1/3 animate-pulse rounded-pill bg-accent" />
+            </span>
+          )}
+        </label>
+
+        <Segmented<number | null>
+          label="Viewport width"
+          size="sm"
+          value={deviceWidth}
+          onChange={setDeviceWidth}
+          options={DEVICE_PRESETS.map((preset) => ({ value: preset.width, label: preset.label, title: preset.title }))}
+        />
 
         <IconButton
+          icon="devtools"
           label="Developer tools"
           disabled={!live}
           onClick={() => {
@@ -183,59 +185,45 @@ export function WebviewPane({
             if (view.isDevToolsOpened()) view.closeDevTools()
             else view.openDevTools()
           }}
-        >
-          <path d="M5.5 5 L3 7.5 L5.5 10" />
-          <path d="M9.5 5 L12 7.5 L9.5 10" />
-        </IconButton>
-        <IconButton label="Project details" onClick={onShowDetails}>
-          <circle cx="7.5" cy="7.5" r="5.5" />
-          <path d="M7.5 6.8 V10.5" />
-          <path d="M7.5 4.6 V5" />
-        </IconButton>
+        />
         <IconButton
-          label="Open in browser"
+          icon="external"
+          label="Open in your browser"
           disabled={!runtime.url}
           onClick={() => {
             if (runtime.url) void window.devlaunchr.system.openExternal(runtime.url)
           }}
-        >
-          <path d="M6 3 H3 V12 H12 V9" />
-          <path d="M8 7.5 L12.5 3" />
-          <path d="M9 2.5 H13 V6.5" />
-        </IconButton>
+        />
 
-        <div className="mx-[2px] h-[18px] w-px shrink-0" style={{ background: 'var(--border-hairline)' }} />
+        <div className="mx-[4px] h-[18px] w-px shrink-0 bg-hairline" />
+        {toggle}
+        <div className="mx-[4px] h-[18px] w-px shrink-0 bg-hairline" />
 
-        {live || busy ? (
+        {live || runtime.status === 'starting' || runtime.status === 'stopping' ? (
           <>
-            <Button
-              className="h-[24px] px-[9px] text-micro"
-              disabled={busy}
-              onClick={() => void restart(project.id)}
-            >
-              Restart
-            </Button>
-            <Button
-              variant="primary"
-              className="h-[24px] px-[9px] text-micro"
-              disabled={busy}
-              onClick={() => void stop(project.id)}
-            >
-              {runtime.status === 'stopping' ? 'Stopping…' : 'Stop'}
+            {!runtime.external && (
+              <Button
+                size="sm"
+                iconOnly
+                icon="restart"
+                disabled={busy}
+                aria-label="Restart server"
+                title="Restart server"
+                onClick={() => void restart(project.id)}
+              />
+            )}
+            <Button size="sm" variant="solid" icon="stop" disabled={busy} onClick={() => void stop(project.id)}>
+              {runtime.status === 'stopping' ? 'Stopping…' : runtime.external ? 'Detach' : 'Stop'}
             </Button>
           </>
         ) : (
-          <Button
-            variant="primary"
-            className="h-[24px] px-[9px] text-micro"
-            onClick={() => void start(project.id)}
-          >
+          <Button size="sm" variant="primary" icon="play" disabled={busy} onClick={() => void start(project.id)}>
             Start
           </Button>
         )}
       </header>
 
-      <div className="relative min-h-0 flex-1" style={{ background: 'var(--surface-recessed)' }}>
+      <div className="relative min-h-0 flex-1 bg-inset">
         {live && runtime.url ? (
           <div className="absolute inset-0 flex justify-center">
             <webview
@@ -258,7 +246,7 @@ export function WebviewPane({
                * keep a project's own sign-ins across restarts.
                */
               partition={`persist:project-${project.id}`}
-              className="h-full border-0"
+              className="h-full border-0 bg-white"
               style={{
                 width: deviceWidth ?? '100%',
                 maxWidth: '100%',
@@ -276,10 +264,7 @@ export function WebviewPane({
 
         {failure && live && (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 p-[10px]">
-            <p
-              className="pointer-events-auto mx-auto w-fit rounded-badge border border-hairline bg-raised px-[10px] py-[4px] text-caption"
-              style={{ color: 'var(--status-crashed)' }}
-            >
+            <p className="pointer-events-auto mx-auto w-fit rounded-badge bg-raised px-[12px] py-[6px] text-caption text-danger" style={{ boxShadow: 'var(--shadow-overlay)' }}>
               {failure}
             </p>
           </div>
@@ -299,20 +284,30 @@ function Placeholder({
   onStart: () => void
 }): React.JSX.Element {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-[10px] px-[24px] text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-[12px] px-[24px] text-center">
       {status === 'starting' ? (
-        <p className="text-ui text-ink-secondary">Waiting for the server to answer…</p>
+        <>
+          <StatusDot status="starting" size={10} />
+          <p className="text-ui text-ink-secondary">Waiting for the server to answer…</p>
+        </>
+      ) : status === 'installing' ? (
+        <>
+          <StatusDot status="installing" size={10} />
+          <p className="text-ui text-ink-secondary">Installing dependencies — progress is in the log below.</p>
+        </>
+      ) : status === 'stopping' ? (
+        <p className="text-ui text-ink-secondary">Stopping…</p>
       ) : status === 'crashed' ? (
         <>
-          <p className="text-ui" style={{ color: 'var(--status-crashed)' }}>
-            {error ?? 'The server stopped unexpectedly.'}
-          </p>
-          <Button onClick={onStart}>Try again</Button>
+          <p className="max-w-[520px] text-ui text-danger">{error ?? 'The server stopped unexpectedly.'}</p>
+          <Button icon="restart" onClick={onStart}>
+            Try again
+          </Button>
         </>
       ) : (
         <>
           <p className="text-ui text-ink-muted">This project is not running.</p>
-          <Button variant="primary" onClick={onStart}>
+          <Button variant="primary" icon="play" onClick={onStart}>
             Start
           </Button>
         </>
@@ -322,15 +317,15 @@ function Placeholder({
 }
 
 function IconButton({
+  icon,
   label,
   disabled,
-  onClick,
-  children
+  onClick
 }: {
+  icon: IconName
   label: string
   disabled?: boolean
   onClick: (event: React.MouseEvent) => void
-  children: React.ReactNode
 }): React.JSX.Element {
   return (
     <button
@@ -339,11 +334,9 @@ function IconButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex size-[24px] shrink-0 items-center justify-center rounded-control text-ink-secondary transition-colors hover:bg-[var(--surface-hover)] hover:text-ink disabled:pointer-events-none disabled:opacity-35"
+      className="flex size-[28px] shrink-0 items-center justify-center rounded-[9px] text-ink-secondary transition-colors hover:bg-hover hover:text-ink disabled:pointer-events-none disabled:opacity-35"
     >
-      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-        {children}
-      </svg>
+      <Icon name={icon} size={15} />
     </button>
   )
 }

@@ -21,25 +21,43 @@ const has = (root: string, ...names: string[]): boolean =>
 
 // ------------------------------------------------------------------- node
 
-type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
+export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
 
-export function nodePackageManager(root: string): PackageManager {
-  try {
-    const pkg: unknown = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-    const declared =
-      typeof pkg === 'object' && pkg !== null
-        ? (pkg as { packageManager?: string }).packageManager?.split('@')[0]
-        : undefined
-    if (declared === 'pnpm' || declared === 'yarn' || declared === 'bun' || declared === 'npm') {
-      return declared
+/**
+ * The manager used when a project names none and has no lockfile — the
+ * user's "default package manager" setting. Held here rather than read from
+ * the store so detection stays free of an import cycle.
+ */
+let fallbackManager: PackageManager = 'npm'
+
+export function setFallbackPackageManager(manager: PackageManager): void {
+  fallbackManager = manager
+}
+
+/**
+ * Which package manager a Node project uses: its `packageManager` field
+ * first, then its lockfile, then the user's default. Pass `pkg` when the
+ * caller has already parsed package.json.
+ */
+export function nodePackageManager(root: string, pkg?: { packageManager?: string } | null): PackageManager {
+  let manifest = pkg
+  if (manifest === undefined) {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+      manifest = typeof parsed === 'object' && parsed !== null ? (parsed as { packageManager?: string }) : null
+    } catch {
+      manifest = null
     }
-  } catch {
-    // Fall through to lockfiles.
+  }
+  const declared = manifest?.packageManager?.split('@')[0]
+  if (declared === 'pnpm' || declared === 'yarn' || declared === 'bun' || declared === 'npm') {
+    return declared
   }
   if (has(root, 'pnpm-lock.yaml')) return 'pnpm'
   if (has(root, 'yarn.lock')) return 'yarn'
   if (has(root, 'bun.lockb', 'bun.lock')) return 'bun'
-  return 'npm'
+  if (has(root, 'package-lock.json')) return 'npm'
+  return fallbackManager
 }
 
 const NODE_TYPES = new Set<ProjectType>(['node-vite', 'node-next', 'node-generic'])

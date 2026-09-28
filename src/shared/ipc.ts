@@ -9,6 +9,7 @@ export const CH = {
   appGetTheme: 'app:getTheme',
   appSetTheme: 'app:setTheme',
   appThemeChanged: 'app:themeChanged',
+  appCommand: 'app:command',
 
   projectsList: 'projects:list',
   projectsAdd: 'projects:add',
@@ -33,6 +34,8 @@ export const CH = {
   runtimeRequirements: 'runtime:requirements',
   runtimeChanged: 'runtime:changed',
   runtimeReaped: 'runtime:reaped',
+  runtimeTouch: 'runtime:touch',
+  runtimeIdleStopped: 'runtime:idleStopped',
 
   logsGet: 'logs:get',
   logsAppended: 'logs:appended',
@@ -50,7 +53,9 @@ export const CH = {
   systemRevealInFinder: 'system:revealInFinder',
   systemContextMenu: 'system:contextMenu',
   systemListeners: 'system:listeners',
-  systemFreePort: 'system:freePort'
+  systemFreePort: 'system:freePort',
+  systemOpenInEditor: 'system:openInEditor',
+  systemPickDirectory: 'system:pickDirectory'
 } as const
 
 export type Channel = (typeof CH)[keyof typeof CH]
@@ -184,6 +189,30 @@ export type ContextMenuAction =
   | 'edit'
   | 'toggleFavorite'
   | 'remove'
+
+/**
+ * Commands the native application menu sends to the window. The menu owns
+ * the keyboard shortcuts, so they keep working while focus is inside an
+ * embedded project preview, which swallows ordinary key events.
+ */
+export type AppCommand =
+  | 'palette'
+  | 'settings'
+  | 'addProject'
+  | 'scan'
+  | 'ports'
+  | 'home'
+  | 'toggleLogs'
+  | 'refresh'
+
+/** Sent when idle auto-stop shuts a server down, so the user is told why. */
+export interface IdleStopNotice {
+  projectId: string
+  name: string
+  minutes: number
+}
+
+export type EditorOpenResult = { ok: true } | { ok: false; message: string }
 
 export interface ContextMenuRequest {
   projectId: string

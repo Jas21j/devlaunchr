@@ -1,9 +1,5 @@
 import type { ComponentPropsWithRef, ReactNode } from 'react'
-
-const CONTROL =
-  'w-full rounded-control border border-hairline bg-raised px-[10px] text-ui text-ink ' +
-  'placeholder:text-ink-placeholder focus:outline-none focus-visible:outline-2 ' +
-  'focus-visible:outline-[var(--text-primary)] focus-visible:outline-offset-1'
+import { Icon } from './Icon'
 
 export function Field({
   label,
@@ -16,11 +12,9 @@ export function Field({
 }): React.JSX.Element {
   return (
     <label className="flex flex-col gap-[6px]">
-      <span className="text-micro font-medium uppercase tracking-[0.06em] text-ink-muted">
-        {label}
-      </span>
+      <span className="eyebrow">{label}</span>
       {children}
-      {hint && <span className="text-caption text-ink-muted">{hint}</span>}
+      {hint && <span className="text-caption leading-[1.45] text-ink-muted">{hint}</span>}
     </label>
   )
 }
@@ -32,17 +26,15 @@ export function Input({
 }: ComponentPropsWithRef<'input'> & { mono?: boolean }): React.JSX.Element {
   return (
     <input
+      spellCheck={false}
       {...props}
-      className={`${CONTROL} h-[30px] selectable ${mono ? 'font-mono text-caption' : ''} ${className}`}
+      className={`field selectable h-[32px] ${mono ? 'font-mono text-caption' : ''} ${className}`}
     />
   )
 }
 
-export function TextArea({
-  className = '',
-  ...props
-}: ComponentPropsWithRef<'textarea'>): React.JSX.Element {
-  return <textarea {...props} className={`${CONTROL} selectable resize-none py-[8px] ${className}`} />
+export function TextArea({ className = '', ...props }: ComponentPropsWithRef<'textarea'>): React.JSX.Element {
+  return <textarea {...props} className={`field selectable resize-none py-[8px] leading-[1.45] ${className}`} />
 }
 
 export function Select({
@@ -51,9 +43,14 @@ export function Select({
   ...props
 }: ComponentPropsWithRef<'select'>): React.JSX.Element {
   return (
-    <select {...props} className={`${CONTROL} h-[30px] appearance-none ${className}`}>
-      {children}
-    </select>
+    <span className={`relative flex ${className}`}>
+      <select {...props} className="field h-[32px] appearance-none pr-[30px]">
+        {children}
+      </select>
+      <span className="pointer-events-none absolute right-[10px] top-1/2 -translate-y-1/2 text-ink-muted">
+        <Icon name="chevronDown" size={13} />
+      </span>
+    </span>
   )
 }
 
@@ -61,38 +58,39 @@ export function Toggle({
   checked,
   onChange,
   label,
-  hint
+  hint,
+  disabled = false
 }: {
   checked: boolean
   onChange: (next: boolean) => void
   label: string
-  hint?: string
+  hint?: ReactNode
+  disabled?: boolean
 }): React.JSX.Element {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="flex items-start gap-[10px] rounded-control p-[6px] text-left hover:bg-[var(--surface-hover)]"
+      className="-mx-[8px] flex items-start justify-between gap-[16px] rounded-control px-[8px] py-[8px] text-left hover:bg-hover disabled:pointer-events-none disabled:opacity-50"
     >
+      <span className="flex min-w-0 flex-col gap-[2px]">
+        <span className="text-ui text-ink">{label}</span>
+        {hint && <span className="text-caption leading-[1.45] text-ink-muted">{hint}</span>}
+      </span>
       <span
-        className="mt-[2px] flex h-[16px] w-[27px] shrink-0 items-center rounded-pill p-[2px] transition-colors duration-[120ms]"
-        style={{
-          background: checked ? 'var(--text-primary)' : 'var(--border-strong)'
-        }}
+        className="mt-[1px] flex h-[18px] w-[31px] shrink-0 items-center rounded-pill p-[2px] transition-colors duration-[120ms]"
+        style={{ background: checked ? 'var(--accent-solid)' : 'var(--border-strong)' }}
       >
         <span
-          className="size-[12px] rounded-pill transition-transform duration-[120ms]"
+          className="size-[14px] rounded-pill transition-transform duration-[120ms]"
           style={{
-            background: 'var(--surface-raised)',
-            transform: checked ? 'translateX(11px)' : 'translateX(0)'
+            background: checked ? 'var(--accent-on)' : 'var(--surface-raised)',
+            transform: checked ? 'translateX(13px)' : 'translateX(0)'
           }}
         />
-      </span>
-      <span className="flex flex-col gap-[2px]">
-        <span className="text-ui text-ink">{label}</span>
-        {hint && <span className="text-caption text-ink-muted">{hint}</span>}
       </span>
     </button>
   )

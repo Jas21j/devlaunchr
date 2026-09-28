@@ -122,6 +122,62 @@ void app.whenReady().then(async () => {
   check('remove reports success', store.removeProject(spaced.id) === true)
   check('remove of an unknown id reports false', store.removeProject('nope') === false)
 
+  // --- default package manager: only a fallback, never an override
+  const { setFallbackPackageManager, nodePackageManager } = await import('../src/main/dependencies')
+  const bare = makeProject('no-lockfile', {
+    'package.json': JSON.stringify({ name: 'no-lockfile', scripts: { dev: 'vite' }, devDependencies: { vite: '^7' } })
+  })
+  const locked = makeProject('npm-locked', {
+    'package.json': JSON.stringify({ name: 'npm-locked', scripts: { dev: 'vite' } }),
+    'package-lock.json': '{}'
+  })
+  const declared = makeProject('declares-yarn', {
+    'package.json': JSON.stringify({ name: 'declares-yarn', packageManager: 'yarn@4.1.0', scripts: { dev: 'vite' } })
+  })
+  check('no lockfile and no setting falls back to npm', nodePackageManager(bare) === 'npm')
+  setFallbackPackageManager('pnpm')
+  check('no lockfile uses the default package manager', nodePackageManager(bare) === 'pnpm')
+  check('detection uses it for the start command', detectProject(bare).startCommand === 'pnpm dev', detectProject(bare).startCommand)
+  check('a package-lock.json still means npm', nodePackageManager(locked) === 'npm')
+  check('a declared packageManager still wins', nodePackageManager(declared) === 'yarn')
+  setFallbackPackageManager('npm')
+
+  // --- editor launch commands
+  const { editorCommand } = await import('../src/main/editor')
+  const folder = process.platform === 'win32' ? "C:\\Users\\o'neil\\my app" : "/Users/o'neil/my app"
+  const quoted = process.platform === 'win32' ? "'C:\\Users\\o''neil\\my app'" : `'/Users/o'\\''neil/my app'`
+  check('VS Code opens through its code launcher', editorCommand({ editor: 'vscode', editorCustomCommand: '' }, folder) === `code ${quoted}`)
+  check('Sublime uses subl', editorCommand({ editor: 'sublime', editorCustomCommand: '' }, folder) === `subl ${quoted}`)
+  check(
+    'a custom command gets the folder appended',
+    editorCommand({ editor: 'custom', editorCustomCommand: 'idea' }, folder) === `idea ${quoted}`
+  )
+  check(
+    'a custom {path} placeholder is replaced in place',
+    editorCommand({ editor: 'custom', editorCustomCommand: 'nvim-qt {path} --maximized' }, folder) ===
+      `nvim-qt ${quoted} --maximized`
+  )
+  check('an empty custom command is reported, not run', editorCommand({ editor: 'custom', editorCustomCommand: '  ' }, folder) === null)
+
+  // --- idle auto-stop policy
+  const { idleProjects } = await import('../src/main/idle')
+  const now = 10_000_000
+  const minute = 60_000
+  const candidates = [
+    { projectId: 'quiet', startedAt: now - 40 * minute, lastActivity: now - 31 * minute, external: false },
+    { projectId: 'busy', startedAt: now - 40 * minute, lastActivity: now - 2 * minute, external: false },
+    { projectId: 'fresh', startedAt: now - 5 * minute, lastActivity: null, external: false },
+    { projectId: 'adopted', startedAt: now - 90 * minute, lastActivity: null, external: true },
+    { projectId: 'never-logged', startedAt: now - 45 * minute, lastActivity: null, external: false }
+  ]
+  const idle = idleProjects(candidates, now, 30)
+  check('a server quiet past the limit is idle', idle.includes('quiet'))
+  check('recent output keeps a server alive', !idle.includes('busy'))
+  check('a freshly started server is never idle', !idle.includes('fresh'))
+  check('a server devLaunchr did not start is never stopped', !idle.includes('adopted'))
+  check('a silent server counts from its start time', idle.includes('never-logged'))
+  check('the feature is off when unset', idleProjects(candidates, now, null).length === 0)
+
   console.log(failures === 0 ? '\nall store checks passed' : `\n${failures} check(s) failed`)
   app.exit(failures === 0 ? 0 : 1)
 })

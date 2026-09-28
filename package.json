@@ -1,6 +1,6 @@
 {
   "name": "devlaunchr",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A local dev portal for macOS, Windows, and Linux: find every web project on your machine, start it, preview it, and never leave an orphaned process behind.",
   "main": "./out/main/index.js",
   "author": {

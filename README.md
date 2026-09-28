@@ -28,6 +28,14 @@ scanning, process supervision, and HTTP health checks against loopback.
   collision names the process holding it instead of printing an error code.
 - **Keeps every project on its own port.** A preview only ever shows the
   project it belongs to: see [One project, one port](#one-project-one-port).
+- **Gets you anywhere from the keyboard.** A command palette (⌘K / Ctrl K)
+  jumps to any project and starts, stops or opens it; every menu action has a
+  shortcut that works even while a preview has focus.
+- **Opens projects in your editor** — VS Code, Cursor, Zed, Sublime Text, or
+  any command you give it.
+- **Stops servers nobody is using**, if you ask it to: a server devLaunchr
+  started that has written no output and has not been on screen for the time
+  you choose is shut down. Servers you started elsewhere are never touched.
 
 ## Download
 
@@ -60,6 +68,30 @@ The realistic version of "use it from my phone" is a companion web UI served on
 your local network, letting a phone browser start and stop projects that run on
 your computer. That is tracked as a roadmap item, not shipped.
 
+## Using it
+
+The home screen shows every project with its preview image and a filter row
+that doubles as a summary — how many are running, stopped, or need attention
+before they can run. Click a project for its page: its live preview (once it is
+running), an overview of its commands, port and environment, and any problem
+with the one action that fixes it.
+
+| Shortcut (macOS / Windows & Linux) | Does |
+|---|---|
+| ⌘K / Ctrl K | Command palette |
+| ⌘, / Ctrl , | Settings |
+| ⌘1 / Ctrl 1 | All projects |
+| ⌘O / Ctrl O | Add a project folder |
+| ⌘⇧O / Ctrl Shift O | Scan for projects |
+| ⌘⇧L / Ctrl Shift L | Listening ports |
+| ⌘J / Ctrl J | Show or hide logs |
+| ⌘⇧R / Ctrl Shift R | Refresh status and preview images |
+
+Settings cover the theme, which folders a scan walks and how deep, the port
+range, the startup timeout, idle auto-stop, the default package manager for
+projects with no lockfile, automatic dependency installs, your editor, and
+opening at login (macOS and Windows).
+
 ## Requirements
 
 - **macOS** 13 or later, Apple Silicon or Intel
@@ -88,7 +120,8 @@ It covers persistence and normalization, process start/stop including
 process-group kill, port allocation and collisions (including ports shared
 across addresses and framework port flags), crash and missing-binary
 detection, the orphan reaper's PID-recycling guard, dependency detection across
-ecosystems, and thumbnail capture.
+ecosystems, the default-package-manager fallback, editor launch commands, the
+idle auto-stop policy, and thumbnail capture.
 
 ## Build
 
@@ -150,7 +183,9 @@ with a real foreign server and checks what the preview would actually show.
 ## Platform differences
 
 `src/main/platform.ts` and `src/main/processTable.ts` are the only places the
-code branches on the operating system. The first covers the shell used to run project commands, how a process tree is
+code branches on the operating system. The first covers the shell used to run
+project commands, how an argument is quoted for that shell, whether the OS
+supports login items, how a process tree is
 killed (`kill(-pid)` on Unix, `taskkill /T` on Windows), how a pid's start time
 is read for the recycling guard, where a Python virtualenv keeps its binaries,
 and how listening ports are enumerated (`lsof` versus `netstat` + `tasklist`).
@@ -168,17 +203,26 @@ passthrough. Embedded project tabs are hardened in the main process on
 
 ```
 src/
-├── main/          app lifecycle, IPC, scanning, process supervision
+├── main/          app lifecycle, menu, IPC, scanning, process supervision
 ├── preload/       the contextBridge API, explicitly enumerated
 ├── renderer/      React UI
 └── shared/        types and the IPC channel contract
 ```
 
+Keyboard shortcuts belong to the native application menu (`src/main/menu.ts`),
+which sends a command to the window. A shortcut handled inside the page would
+never fire while focus is in a project preview, because the embedded page
+receives the key events.
+
 ## Design
 
-`DESIGN-APP.md` documents the interface's design tokens and the reasoning
-behind each one, including the three places it deliberately departs from its
-source style guide.
+[`DESIGN.md`](DESIGN.md) documents the design system: the zinc surfaces, the
+single launch-green accent taken from the logo and exactly where it is allowed,
+status encoding, type, geometry, the shared components, and the writing rules.
+
+## Changelog
+
+See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## License
 

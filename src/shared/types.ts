@@ -139,4 +139,6 @@ export interface AppInfo {
   platform: NodeJS.Platform
   configPath: string
   home: string
+  /** Whether the OS lets an app register itself to open at login. */
+  loginItemSupported: boolean
 }

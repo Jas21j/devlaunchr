@@ -1,10 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Detection } from '@shared/ipc'
-import { portFromCommand } from './dependencies'
+import { nodePackageManager, portFromCommand, type PackageManager } from './dependencies'
 import { venvActivate, venvExists } from './platform'
-
-type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
 
 interface PackageJson {
   scripts?: Record<string, string>
@@ -28,18 +26,6 @@ function readPackageJson(dir: string): PackageJson | null {
     // we just can't read its scripts.
     return {}
   }
-}
-
-function detectPackageManager(dir: string, pkg: PackageJson | null): PackageManager {
-  // `packageManager: "pnpm@9.1.0"` in package.json is the most explicit signal.
-  const declared = pkg?.packageManager?.split('@')[0]
-  if (declared === 'pnpm' || declared === 'yarn' || declared === 'bun' || declared === 'npm') {
-    return declared
-  }
-  if (has(dir, 'pnpm-lock.yaml')) return 'pnpm'
-  if (has(dir, 'yarn.lock')) return 'yarn'
-  if (has(dir, 'bun.lockb', 'bun.lock')) return 'bun'
-  return 'npm'
 }
 
 const runScript = (pm: PackageManager, script: string): string =>
@@ -100,7 +86,7 @@ export function detectProject(dir: string): Detection {
   }
 
   if (pkg) {
-    const pm = detectPackageManager(dir, pkg)
+    const pm = nodePackageManager(dir, pkg)
     const deps = { ...pkg.dependencies, ...pkg.devDependencies }
     const scripts = pkg.scripts ?? {}
     const install = installFor(pm)

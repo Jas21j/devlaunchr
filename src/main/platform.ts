@@ -5,6 +5,9 @@ import { join } from 'node:path'
 export const IS_WINDOWS = process.platform === 'win32'
 export const IS_MAC = process.platform === 'darwin'
 
+/** Electron can register an app to open at login on macOS and Windows only. */
+export const SUPPORTS_LOGIN_ITEM = IS_MAC || IS_WINDOWS
+
 /**
  * The shell project commands run in.
  *
@@ -124,6 +127,17 @@ export function processStartTime(pid: number): string {
     return ''
   }
 }
+
+/**
+ * Quotes one argument for the shell `shellFor` runs, so a path with spaces or
+ * quotes in it reaches the program as a single, literal argument.
+ */
+export function shellQuote(value: string): string {
+  return IS_WINDOWS ? `'${value.replace(/'/g, "''")}'` : `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+/** What the platform's file manager is called, for menu labels and copy. */
+export const FILE_MANAGER = IS_MAC ? 'Finder' : IS_WINDOWS ? 'File Explorer' : 'Files'
 
 /** Where a Python virtualenv keeps its executables. */
 export const VENV_BIN = IS_WINDOWS ? 'Scripts' : 'bin'

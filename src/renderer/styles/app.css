@@ -11,6 +11,8 @@
   --color-raised: var(--surface-raised);
   --color-recessed: var(--surface-recessed);
   --color-inset: var(--surface-inset);
+  --color-hover: var(--surface-hover);
+  --color-active: var(--surface-active);
   --color-hairline: var(--border-hairline);
   --color-strong: var(--border-strong);
 
@@ -20,11 +22,19 @@
   --color-ink-placeholder: var(--text-placeholder);
   --color-ink-inverse: var(--text-inverse);
 
-  --color-ember: var(--color-ember);
+  --color-accent: var(--accent-solid);
+  --color-accent-hover: var(--accent-solid-hover);
+  --color-accent-on: var(--accent-on);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-border: var(--accent-border);
+
   --color-running: var(--status-running);
   --color-pending: var(--status-pending);
   --color-crashed: var(--status-crashed);
   --color-stopped: var(--status-stopped);
+  --color-warn: var(--tone-warn-text);
+  --color-danger: var(--tone-danger-text);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
@@ -37,6 +47,7 @@
   --text-section: var(--text-section);
   --text-display: var(--text-display);
 
+  --radius-chip: var(--radius-chip);
   --radius-badge: var(--radius-badge);
   --radius-control: var(--radius-control);
   --radius-card: var(--radius-card);
@@ -71,6 +82,10 @@
     cursor: default;
   }
 
+  button:not(:disabled) {
+    cursor: default;
+  }
+
   /* Text the user will genuinely want to copy: logs, URLs, paths. */
   .selectable {
     user-select: text;
@@ -78,9 +93,13 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--text-primary);
+    outline: 2px solid var(--accent-text);
     outline-offset: 2px;
     border-radius: var(--radius-control);
+  }
+
+  ::selection {
+    background: var(--accent-soft-strong);
   }
 
   ::-webkit-scrollbar {
@@ -110,6 +129,78 @@
   .no-drag {
     -webkit-app-region: no-drag;
   }
+
+  /* Uppercase micro-label used for every section heading. */
+  .eyebrow {
+    font-size: var(--text-micro);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .field {
+    width: 100%;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border-hairline);
+    background: var(--surface-raised);
+    padding: 0 10px;
+    font-size: var(--text-ui);
+    color: var(--text-primary);
+    transition: border-color var(--duration-fast) var(--ease-out),
+      box-shadow var(--duration-fast) var(--ease-out);
+  }
+  .field::placeholder {
+    color: var(--text-placeholder);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--accent-border);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .field:disabled {
+    color: var(--text-placeholder);
+    background: var(--surface-recessed);
+  }
+}
+
+@keyframes dl-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  80%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes dl-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes dl-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-rise {
+  animation: dl-rise var(--duration-base) var(--ease-out) both;
+}
+.animate-fade {
+  animation: dl-fade var(--duration-base) var(--ease-out) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

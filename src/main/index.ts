@@ -1,12 +1,15 @@
 import { join } from 'node:path'
 import { app, shell, BrowserWindow, nativeTheme, protocol } from 'electron'
 import { electronApp, is } from '@electron-toolkit/utils'
-import { IS_MAC } from './platform'
+import { IS_MAC, SUPPORTS_LOGIN_ITEM } from './platform'
 import { CH } from '@shared/ipc'
 import { registerIpc } from './ipc'
 import * as runtime from './processManager'
 import * as thumbnails from './thumbnails'
-import { getProjects, getSettings, migrate } from './store'
+import { emitter as storeEvents, getProjects, getSettings, migrate, setSettings } from './store'
+import { setFallbackPackageManager } from './dependencies'
+import { installMenu } from './menu'
+import type { Settings } from '@shared/types'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -61,16 +64,18 @@ function createWindow(): BrowserWindow {
     // platform gets a normal system title bar, because a custom one there
     // means reimplementing window controls for no benefit.
     ...(IS_MAC
-      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 22 } }
-      : {}),
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 20 } }
+      : // The menu bar stays one Alt press away; every item in it also has a
+        // shortcut and a place in the command palette.
+        { autoHideMenuBar: true }),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#18181b' : '#f4f4f5',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      // Required for the embedded project tabs in build step 5. Enabled now so
-      // the window's security posture is fixed once and never widened later.
+      // The embedded project previews. Each one is locked down separately in
+      // `will-attach-webview` below.
       webviewTag: true
     }
   })
@@ -120,14 +125,47 @@ function createWindow(): BrowserWindow {
   return window
 }
 
+/**
+ * Pushes the settings that live outside devLaunchr's own code — the theme,
+ * the OS login item, the package-manager fallback — into effect. Runs at boot
+ * and on every change, so the stored settings are always the source of truth.
+ */
+function applySettings(settings: Settings): void {
+  // The OS appearance only applies when the user has chosen 'system'.
+  nativeTheme.themeSource = settings.theme
+  setFallbackPackageManager(settings.defaultPackageManager)
+
+  if (manageLoginItem() && app.getLoginItemSettings().openAtLogin !== settings.launchAtLogin) {
+    app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin })
+  }
+}
+
+/**
+ * An unpackaged dev build would register the bare Electron binary as the
+ * login item, so only a real install touches it.
+ */
+const manageLoginItem = (): boolean => app.isPackaged && SUPPORTS_LOGIN_ITEM
+
+/**
+ * The login item can also be switched in the OS's own settings. At boot the
+ * OS is the truth, so the stored setting follows it rather than undoing the
+ * user's choice there.
+ */
+function adoptLoginItemFromOs(): void {
+  if (!manageLoginItem()) return
+  const openAtLogin = app.getLoginItemSettings().openAtLogin
+  if (getSettings().launchAtLogin !== openAtLogin) setSettings({ launchAtLogin: openAtLogin })
+}
+
 void app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.devlaunchr.app')
 
   thumbnails.registerProtocol()
   migrate()
-  // The stored preference is the source of truth; the OS setting only applies
-  // when the user has chosen 'system'.
-  nativeTheme.themeSource = getSettings().theme
+  adoptLoginItemFromOs()
+  applySettings(getSettings())
+  storeEvents.on('settings', applySettings)
+  installMenu()
   registerIpc()
 
   mainWindow = createWindow()
@@ -163,7 +201,7 @@ void app.whenReady().then(() => {
 
 // On macOS the app stays resident with no windows; the Dock icon reopens it.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  if (!IS_MAC) app.quit()
 })
 
 /**

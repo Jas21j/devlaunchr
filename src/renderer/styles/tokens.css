@@ -1,7 +1,9 @@
 /*
- * Design tokens — DESIGN.md palette and type, geometry compressed per
- * DESIGN-APP.md. Values marked DERIVED are interpolations of the zinc ramp,
- * not new hues.
+ * Design tokens. See DESIGN.md for the reasoning behind each one.
+ *
+ * Two layers: palette constants, then role aliases that re-resolve per theme.
+ * Components reference roles (--surface-raised, --accent-text), never palette
+ * constants, so one attribute on <html> flips the whole interface.
  */
 
 @font-face {
@@ -27,7 +29,7 @@
 }
 
 :root {
-  /* Palette — verbatim from DESIGN.md */
+  /* Zinc ramp — carries every surface, border and line of text */
   --color-obsidian: #09090b;
   --color-graphite: #18181b;
   --color-slate: #27272a;
@@ -39,12 +41,17 @@
   --color-cloud: #ececee;
   --color-paper: #f4f4f5;
   --color-snow: #ffffff;
-  --color-ember: #ff5a00;
+
+  /* Launch green — sampled from the logo mark. The one accent. */
+  --color-launch: #00e833;
+  --color-launch-hover: #00d42e;
+  --color-launch-edge: #00b528;
+  --color-launch-deep: #0c7f2a;
 
   /* Type */
-  --font-sans: 'Cosmica', 'DM Sans', ui-sans-serif, system-ui, -apple-system,
-    BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
 
   --text-micro: 11px;
   --text-caption: 12px;
@@ -56,14 +63,9 @@
 
   --leading-tight: 1.2;
   --leading-ui: 1.35;
-  --leading-body: 1.45;
+  --leading-body: 1.5;
 
-  --weight-regular: 400;
-  --weight-medium: 500;
-  --weight-semibold: 600;
-  --weight-bold: 700;
-
-  /* Spacing — 4px base, compressed scale */
+  /* Spacing — 4px base */
   --space-2: 2px;
   --space-4: 4px;
   --space-6: 6px;
@@ -75,7 +77,8 @@
   --space-32: 32px;
   --space-40: 40px;
 
-  /* Geometry — floor of 12px preserved from DESIGN.md */
+  /* Geometry — nothing visible goes below 12px except the tiniest chips */
+  --radius-chip: 8px;
   --radius-badge: 12px;
   --radius-control: 12px;
   --radius-card: 14px;
@@ -84,7 +87,7 @@
 
   /* Chrome */
   --titlebar-height: 52px;
-  --sidebar-width: 268px;
+  --sidebar-width: 256px;
 
   --duration-fast: 120ms;
   --duration-base: 180ms;
@@ -99,9 +102,10 @@
   --surface-canvas: var(--color-paper);
   --surface-raised: var(--color-snow);
   --surface-recessed: #fafafa;
-  --surface-inset: var(--color-paper);
-  --surface-hover: rgba(9, 9, 11, 0.04);
-  --surface-active: rgba(9, 9, 11, 0.07);
+  --surface-inset: #f1f1f3;
+  --surface-hover: rgba(9, 9, 11, 0.045);
+  --surface-active: rgba(9, 9, 11, 0.075);
+  --surface-scrim: rgba(9, 9, 11, 0.34);
 
   --border-hairline: var(--color-cloud);
   --border-strong: var(--color-mist);
@@ -112,53 +116,78 @@
   --text-placeholder: var(--color-ash);
   --text-inverse: var(--color-snow);
 
-  --status-running: #2f9e5f;
+  --accent-solid: var(--color-launch);
+  --accent-solid-hover: var(--color-launch-hover);
+  --accent-edge: var(--color-launch-edge);
+  --accent-on: var(--color-obsidian);
+  --accent-text: var(--color-launch-deep);
+  --accent-soft: rgba(0, 196, 44, 0.1);
+  --accent-soft-strong: rgba(0, 196, 44, 0.16);
+  --accent-border: rgba(0, 150, 36, 0.32);
+
+  --status-running: #10b53a;
   --status-pending: #c2790f;
   --status-crashed: #c4403a;
   --status-stopped: var(--color-ash);
 
-  --button-primary-bg: var(--color-obsidian);
-  --button-primary-border: #2c2e34;
-  --button-primary-text: var(--color-snow);
+  --tone-warn-text: #9a5b06;
+  --tone-warn-soft: rgba(194, 121, 15, 0.09);
+  --tone-danger-text: #b3342e;
+  --tone-danger-soft: rgba(196, 64, 58, 0.08);
 
-  --shadow-control: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.5),
-    inset 0 9px 14px -5px rgba(117, 123, 133, 0.4), 0 0 0 1px rgb(44, 46, 52),
-    0 2px 4px 0 rgba(0, 0, 0, 0.12);
-  --shadow-overlay: 0 12px 32px -8px rgba(9, 9, 11, 0.22),
-    0 0 0 1px var(--border-hairline);
+  --button-solid-bg: var(--color-obsidian);
+  --button-solid-text: var(--color-snow);
+
+  --shadow-control: inset 0 1px 0 0 rgba(255, 255, 255, 0.45), 0 1px 2px 0 rgba(9, 9, 11, 0.12);
+  --shadow-card-hover: 0 6px 18px -10px rgba(9, 9, 11, 0.22);
+  --shadow-overlay: 0 18px 44px -12px rgba(9, 9, 11, 0.28), 0 0 0 1px var(--border-hairline);
 }
 
 /* ---------- Dark ---------- */
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --surface-canvas: var(--color-graphite);
-  --surface-raised: #1f1f23; /* DERIVED: Graphite → Slate midpoint */
-  --surface-recessed: #161619; /* DERIVED */
-  --surface-inset: #131316; /* DERIVED */
+  /* Deeper than zinc-900, toward the logo's black field. */
+  --surface-canvas: #111113;
+  --surface-raised: #18181b;
+  --surface-recessed: #141416;
+  --surface-inset: #0d0d0f;
   --surface-hover: rgba(244, 244, 245, 0.05);
   --surface-active: rgba(244, 244, 245, 0.09);
+  --surface-scrim: rgba(0, 0, 0, 0.55);
 
-  --border-hairline: #2c2c31; /* DERIVED: Cloud's contrast, inverted */
-  --border-strong: #3a3a41; /* DERIVED */
+  --border-hairline: #26262b;
+  --border-strong: #35353c;
 
   --text-primary: var(--color-paper);
   --text-secondary: var(--color-ash);
-  --text-muted: var(--color-fog);
+  --text-muted: #85858f;
   --text-placeholder: var(--color-steel);
   --text-inverse: var(--color-obsidian);
 
-  --status-running: #45b97a;
+  --accent-solid: var(--color-launch);
+  --accent-solid-hover: #2bf157;
+  --accent-edge: var(--color-launch-edge);
+  --accent-on: var(--color-obsidian);
+  --accent-text: #3aef64;
+  --accent-soft: rgba(0, 232, 51, 0.1);
+  --accent-soft-strong: rgba(0, 232, 51, 0.17);
+  --accent-border: rgba(0, 232, 51, 0.34);
+
+  --status-running: var(--color-launch);
   --status-pending: #e0a340;
-  --status-crashed: #e8695f;
+  --status-crashed: #ee6d63;
   --status-stopped: var(--color-steel);
 
-  --button-primary-bg: var(--color-paper);
-  --button-primary-border: #d4d4d8;
-  --button-primary-text: var(--color-obsidian);
+  --tone-warn-text: #e8b35c;
+  --tone-warn-soft: rgba(224, 163, 64, 0.1);
+  --tone-danger-text: #f07e75;
+  --tone-danger-soft: rgba(238, 109, 99, 0.1);
 
-  --shadow-control: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.14),
-    0 0 0 1px rgba(0, 0, 0, 0.4), 0 2px 4px 0 rgba(0, 0, 0, 0.3);
-  --shadow-overlay: 0 12px 32px -8px rgba(0, 0, 0, 0.6),
-    0 0 0 1px var(--border-hairline);
+  --button-solid-bg: var(--color-paper);
+  --button-solid-text: var(--color-obsidian);
+
+  --shadow-control: inset 0 1px 0 0 rgba(255, 255, 255, 0.25), 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 8px 22px -12px rgba(0, 0, 0, 0.7);
+  --shadow-overlay: 0 22px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--border-hairline);
 }

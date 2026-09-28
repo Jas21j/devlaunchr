@@ -50,9 +50,33 @@ export function disambiguate<T extends { id: string; name: string; path: string 
       labels.set(item.id, item.name)
       continue
     }
-    const segments = item.path.split('/').filter(Boolean)
+    // Both separators: a Windows path has no forward slashes at all.
+    const segments = item.path.split(/[\\/]/).filter(Boolean)
     const parent = segments[segments.length - 2]
     labels.set(item.id, parent ? `${parent}/${item.name}` : item.name)
   }
   return labels
 }
+
+/** Words and symbols that differ by platform, so copy never says "Mac" on Windows. */
+export interface PlatformCopy {
+  isMac: boolean
+  /** "this Mac", "this PC", "this computer" */
+  computer: string
+  fileManager: string
+  /** The shortcut modifier as it is printed: ⌘ or Ctrl. */
+  mod: string
+}
+
+export function platformCopy(platform: string | undefined): PlatformCopy {
+  if (platform === 'darwin') {
+    return { isMac: true, computer: 'this Mac', fileManager: 'Finder', mod: '⌘' }
+  }
+  if (platform === 'win32') {
+    return { isMac: false, computer: 'this PC', fileManager: 'File Explorer', mod: 'Ctrl' }
+  }
+  return { isMac: false, computer: 'this computer', fileManager: 'Files', mod: 'Ctrl' }
+}
+
+export const plural = (count: number, word: string, many = `${word}s`): string =>
+  `${count} ${count === 1 ? word : many}`

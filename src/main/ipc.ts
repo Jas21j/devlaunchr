@@ -11,7 +11,7 @@ import type {
   ScanResult
 } from '@shared/ipc'
 import type { AppInfo, Project, RuntimeState, Settings, ThemePreference } from '@shared/types'
-import type { ListeningPort, Requirement } from '@shared/ipc'
+import type { EditorOpenResult, IdleStopNotice, ListeningPort, Requirement } from '@shared/ipc'
 import { detectProject, pinnedPort } from './detect'
 import { scan } from './scanner'
 import { belongsTo, listeners as readListeners, processTable } from './processTable'
@@ -20,6 +20,12 @@ import { inspectRequirements } from './requirements'
 import * as runtime from './processManager'
 import * as store from './store'
 import * as thumbnails from './thumbnails'
+import * as idle from './idle'
+import { editorLabel, openInEditor } from './editor'
+import { FILE_MANAGER, SUPPORTS_LOGIN_ITEM } from './platform'
+
+/** How often idle auto-stop looks for servers nobody is using. */
+const IDLE_SWEEP_MS = 60_000
 
 /**
  * `needsInstall` is a fact about the filesystem, not about a process, so it is
@@ -64,6 +70,8 @@ export function registerIpc(): void {
   })
   runtime.events.on('logs', (batch: unknown) => broadcast(CH.logsAppended, batch))
 
+  startIdleSweep()
+
   // ------------------------------------------------------------------- app
 
   ipcMain.handle(CH.appInfo, (): AppInfo => ({
@@ -71,7 +79,8 @@ export function registerIpc(): void {
     electronVersion: process.versions.electron,
     platform: process.platform,
     configPath: store.configPath(),
-    home: app.getPath('home')
+    home: app.getPath('home'),
+    loginItemSupported: SUPPORTS_LOGIN_ITEM
   }))
 
   ipcMain.handle(CH.appGetTheme, themeSnapshot)
@@ -96,8 +105,13 @@ export function registerIpc(): void {
     store.updateProject(id, patch)
   )
 
-  ipcMain.handle(CH.projectsRemove, (_event, id: string): boolean => {
+  ipcMain.handle(CH.projectsRemove, async (_event, id: string): Promise<boolean> => {
+    // A server whose project is removed would otherwise keep running with
+    // nothing in the interface left to stop it, holding its port until quit.
+    const project = store.getProjects().find((p) => p.id === id)
+    if (project && runtime.isRunning(id)) await runtime.stop(project)
     thumbnails.forget(id)
+    idle.forget(id)
     return store.removeProject(id)
   })
 
@@ -202,14 +216,6 @@ export function registerIpc(): void {
   )
 
   /**
-   * Re-reads the world and rebuilds what devLaunchr shows about it: which
-   * projects are actually serving, and what each one currently looks like.
-   *
-   * Exists because a preview can go stale in ways the app cannot notice on its
-   * own — a server restarted on a different port, or two projects reused one
-   * port and a screenshot was taken of the wrong site.
-   */
-  /**
    * What each project still needs installed on this machine before it can run.
    * Only missing items are returned, so an empty map means everything is ready.
    */
@@ -223,6 +229,14 @@ export function registerIpc(): void {
     return report
   })
 
+  /**
+   * Re-reads the world and rebuilds what devLaunchr shows about it: which
+   * projects are actually serving, and what each one currently looks like.
+   *
+   * Exists because a preview can go stale in ways the app cannot notice on its
+   * own — a server restarted on a different port, or two projects reused one
+   * port and a screenshot was taken of the wrong site.
+   */
   ipcMain.handle(
     CH.runtimeResync,
     async (): Promise<{ adopted: number; recaptured: number; discarded: number }> => {
@@ -273,6 +287,12 @@ export function registerIpc(): void {
     return runtime.runFix(requireProject(id), command)
   })
 
+  // The renderer reports which project is on screen, so a server being looked
+  // at is never stopped for being idle.
+  ipcMain.handle(CH.runtimeTouch, (_event, id: string) => {
+    if (typeof id === 'string' && runtime.isRunning(id)) idle.touch(id)
+  })
+
   ipcMain.handle(CH.logsGet, (_event, id: string) => runtime.getLogs(id))
   ipcMain.handle(CH.logsClear, (_event, id: string) => runtime.clearLogs(id))
 
@@ -314,8 +334,8 @@ export function registerIpc(): void {
     if (!Number.isInteger(pid) || pid <= 1) return false
 
     const window = BrowserWindow.fromWebContents(event.sender)
-    const { response } = await dialog.showMessageBox(window ?? new BrowserWindow({ show: false }), {
-      type: 'warning',
+    const options = {
+      type: 'warning' as const,
       buttons: ['Cancel', 'Quit process'],
       defaultId: 0,
       cancelId: 0,
@@ -323,7 +343,8 @@ export function registerIpc(): void {
       message: `Quit “${command}” (pid ${pid}) to free port ${port}?`,
       detail:
         'devLaunchr did not start this process. Quitting it may lose unsaved work in whatever app owns it.'
-    })
+    }
+    const { response } = await (window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options))
     if (response !== 1) return false
 
     try {
@@ -370,12 +391,31 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle(CH.systemRevealInFinder, (_event, path: string) => {
+    // Only paths devLaunchr already knows about; the renderer does not get to
+    // point the file manager anywhere it likes.
+    if (typeof path !== 'string' || !store.findByPath(path)) return
     shell.showItemInFolder(path)
+  })
+
+  ipcMain.handle(CH.systemOpenInEditor, async (_event, id: string): Promise<EditorOpenResult> => {
+    const project = store.getProjects().find((p) => p.id === id)
+    if (!project) return { ok: false, message: 'That project is no longer in your list.' }
+    return openInEditor(store.getSettings(), project.path)
+  })
+
+  ipcMain.handle(CH.systemPickDirectory, async (event, title: unknown): Promise<string | null> => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    const options = {
+      title: typeof title === 'string' ? title : 'Choose a folder',
+      properties: ['openDirectory' as const, 'createDirectory' as const]
+    }
+    const result = await (window ? dialog.showOpenDialog(window, options) : dialog.showOpenDialog(options))
+    return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 
   /**
    * Native context menu rather than a DOM one: it renders above the embedded
-   * webviews added in step 5, which a DOM menu could not, and it matches the
+   * project previews, which a DOM menu could not, and it matches the
    * platform's own menu behavior for free.
    */
   ipcMain.handle(
@@ -402,8 +442,8 @@ export function registerIpc(): void {
           { type: 'separator' },
           { label: 'Open in Browser', enabled: hasUrl, click: pick('openExternal') },
           { label: 'Copy URL', enabled: hasUrl, click: pick('copyUrl') },
-          { label: 'Open in Finder', click: pick('revealInFinder') },
-          { label: 'Open in Editor', click: pick('openInEditor') },
+          { label: `Show in ${FILE_MANAGER}`, click: pick('revealInFinder') },
+          { label: `Open in ${editorLabel(store.getSettings())}`, click: pick('openInEditor') },
           { type: 'separator' },
           {
             label: request.favorite ? 'Remove from Favorites' : 'Add to Favorites',
@@ -421,4 +461,35 @@ export function registerIpc(): void {
       })
     }
   )
+}
+
+/**
+ * Stops servers devLaunchr started that have gone quiet for longer than the
+ * user's "stop idle servers" setting. Re-reads the setting on every pass, so
+ * changing it takes effect without a restart.
+ */
+function startIdleSweep(): void {
+  const timer = setInterval(() => {
+    const { autoStopIdleMinutes: minutes } = store.getSettings()
+    if (minutes === null) return
+
+    const candidates = runtime
+      .allStates()
+      .filter((state) => state.status === 'running')
+      .map((state) => ({
+        projectId: state.projectId,
+        startedAt: state.startedAt,
+        lastActivity: idle.lastActivity(state.projectId),
+        external: state.external !== null
+      }))
+
+    for (const id of idle.idleProjects(candidates, Date.now(), minutes)) {
+      const project = store.getProjects().find((p) => p.id === id)
+      if (!project) continue
+      void runtime.stop(project).then(() => {
+        broadcast(CH.runtimeIdleStopped, { projectId: id, name: project.name, minutes } satisfies IdleStopNotice)
+      })
+    }
+  }, IDLE_SWEEP_MS)
+  timer.unref()
 }

@@ -1,8 +1,9 @@
+import { useMemo } from 'react'
 import type { Project } from '@shared/types'
 import { runtimeOf, useApp } from '../store'
-import { StatusDot } from './StatusDot'
 import { disambiguate } from '../labels'
-import { useMemo } from 'react'
+import { StatusDot } from './StatusDot'
+import { Icon } from './Icon'
 
 /**
  * One tab per project with an open preview. Tabs appear automatically when a
@@ -24,7 +25,7 @@ export function TabBar(): React.JSX.Element | null {
   if (open.length === 0) return null
 
   return (
-    <div className="flex shrink-0 items-center gap-[4px] overflow-x-auto pb-[2px]">
+    <div role="tablist" aria-label="Open previews" className="flex shrink-0 items-center gap-[4px] overflow-x-auto">
       {open.map((project) => (
         <Tab
           key={project.id}
@@ -56,27 +57,31 @@ function Tab({
 
   return (
     <div
-      className="group flex h-[28px] shrink-0 items-center gap-[7px] rounded-card border px-[10px] transition-colors"
-      style={{
-        background: active ? 'var(--surface-raised)' : 'transparent',
-        borderColor: active ? 'var(--border-hairline)' : 'transparent'
-      }}
+      className={`group flex h-[30px] shrink-0 items-center gap-[4px] rounded-[10px] pl-[10px] pr-[4px] transition-colors duration-[120ms] ${
+        active ? 'bg-raised' : 'hover:bg-hover'
+      }`}
+      style={active ? { boxShadow: '0 0 0 1px var(--border-hairline)' } : undefined}
     >
       <button
         type="button"
+        role="tab"
+        aria-selected={active}
         onClick={onSelect}
+        onAuxClick={(event) => {
+          // Middle-click closes, as in every browser.
+          if (event.button === 1) onClose()
+        }}
         className="flex min-w-0 items-center gap-[7px]"
         title={project.path}
       >
         <StatusDot status={runtime.status} />
-        <span
-          className="max-w-[148px] truncate text-ui"
-          style={{ color: active ? 'var(--text-primary)' : 'var(--text-secondary)' }}
-        >
+        <span className={`max-w-[160px] truncate text-ui ${active ? 'font-medium text-ink' : 'text-ink-secondary'}`}>
           {label}
         </span>
         {runtime.port !== null && (
-          <span className="font-mono text-micro text-ink-muted">:{runtime.port}</span>
+          <span className={`font-mono text-micro ${runtime.status === 'running' ? 'text-accent-text' : 'text-ink-muted'}`}>
+            :{runtime.port}
+          </span>
         )}
       </button>
 
@@ -85,11 +90,11 @@ function Tab({
         aria-label={`Close ${label} preview`}
         title="Close preview (the server keeps running)"
         onClick={onClose}
-        className="flex size-[15px] shrink-0 items-center justify-center rounded-[7px] text-ink-placeholder opacity-0 transition-opacity hover:bg-[var(--surface-hover)] hover:text-ink group-hover:opacity-100"
+        className={`flex size-[20px] shrink-0 items-center justify-center rounded-[6px] text-ink-muted transition-opacity hover:bg-hover hover:text-ink focus-visible:opacity-100 ${
+          active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
       >
-        <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-          <path d="M1 1 L7 7 M7 1 L1 7" />
-        </svg>
+        <Icon name="close" size={11} strokeWidth={1.8} />
       </button>
     </div>
   )

@@ -1,10 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { CH } from '@shared/ipc'
 import type {
+  AppCommand,
   ContextMenuAction,
   ContextMenuRequest,
   Detection,
+  EditorOpenResult,
   FolderPick,
+  IdleStopNotice,
   ListeningPort,
   LogBatch,
   NewProjectInput,
@@ -49,7 +52,10 @@ const api = {
     getTheme: (): Promise<ResolvedTheme> => ipcRenderer.invoke(CH.appGetTheme),
     setTheme: (theme: ThemePreference): Promise<void> => ipcRenderer.invoke(CH.appSetTheme, theme),
     onThemeChanged: (listener: (theme: ResolvedTheme) => void): (() => void) =>
-      subscribe(CH.appThemeChanged, listener)
+      subscribe(CH.appThemeChanged, listener),
+    /** Commands chosen from the native menu or its keyboard shortcuts. */
+    onCommand: (listener: (command: AppCommand) => void): (() => void) =>
+      subscribe(CH.appCommand, listener)
   },
 
   projects: {
@@ -85,6 +91,10 @@ const api = {
       ipcRenderer.invoke(CH.runtimeRequirements),
     logs: (id: string): Promise<LogLine[]> => ipcRenderer.invoke(CH.logsGet, id),
     clearLogs: (id: string): Promise<void> => ipcRenderer.invoke(CH.logsClear, id),
+    /** Tells idle auto-stop that this project is on screen right now. */
+    touch: (id: string): Promise<void> => ipcRenderer.invoke(CH.runtimeTouch, id),
+    onIdleStopped: (listener: (notice: IdleStopNotice) => void): (() => void) =>
+      subscribe(CH.runtimeIdleStopped, listener),
     onChanged: (listener: (state: RuntimeState) => void): (() => void) =>
       subscribe(CH.runtimeChanged, listener),
     onLogs: (listener: (batch: LogBatch) => void): (() => void) =>
@@ -116,7 +126,11 @@ const api = {
       ipcRenderer.invoke(CH.systemContextMenu, request),
     listeners: (): Promise<ListeningPort[]> => ipcRenderer.invoke(CH.systemListeners),
     freePort: (pid: number, port: number, command: string): Promise<boolean> =>
-      ipcRenderer.invoke(CH.systemFreePort, pid, port, command)
+      ipcRenderer.invoke(CH.systemFreePort, pid, port, command),
+    openInEditor: (projectId: string): Promise<EditorOpenResult> =>
+      ipcRenderer.invoke(CH.systemOpenInEditor, projectId),
+    pickDirectory: (title?: string): Promise<string | null> =>
+      ipcRenderer.invoke(CH.systemPickDirectory, title)
   }
 }
 

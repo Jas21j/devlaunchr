@@ -1,12 +1,9 @@
-import type { ContextMenuAction } from '@shared/ipc'
+import type { AppCommand, ContextMenuAction } from '@shared/ipc'
 import type { Project } from '@shared/types'
 import { useApp, runtimeOf } from './store'
 
 /** Maps a chosen native-menu item onto a store action. */
-export async function runContextAction(
-  action: ContextMenuAction,
-  project: Project
-): Promise<void> {
+export async function runContextAction(action: ContextMenuAction, project: Project): Promise<void> {
   const state = useApp.getState()
   const runtime = runtimeOf(state, project.id)
 
@@ -24,10 +21,16 @@ export async function runContextAction(
       if (runtime.url) await window.devlaunchr.system.openExternal(runtime.url)
       return
     case 'copyUrl':
-      if (runtime.url) await navigator.clipboard.writeText(runtime.url)
+      if (runtime.url) {
+        await navigator.clipboard.writeText(runtime.url)
+        state.notify('Address copied.', 'success')
+      }
       return
     case 'revealInFinder':
       await window.devlaunchr.system.revealInFinder(project.path)
+      return
+    case 'openInEditor':
+      await state.openInEditor(project.id)
       return
     case 'toggleFavorite':
       await state.toggleFavorite(project.id)
@@ -37,8 +40,6 @@ export async function runContextAction(
       return
     case 'remove':
       await state.remove(project.id)
-      return
-    default:
       return
   }
 }
@@ -55,4 +56,35 @@ export async function openContextMenu(project: Project): Promise<void> {
     hasUrl: runtime.url !== null
   })
   if (action) await runContextAction(action, project)
+}
+
+/** Handles a command from the native menu or one of its shortcuts. */
+export function runAppCommand(command: AppCommand): void {
+  const state = useApp.getState()
+  switch (command) {
+    case 'palette':
+      if (state.paletteOpen) state.closePalette()
+      else state.openPalette()
+      return
+    case 'settings':
+      state.openSettings()
+      return
+    case 'addProject':
+      void state.beginAdd()
+      return
+    case 'scan':
+      void state.startScan()
+      return
+    case 'ports':
+      state.openPorts()
+      return
+    case 'home':
+      state.select(null)
+      return
+    case 'toggleLogs':
+      state.toggleLogPane()
+      return
+    case 'refresh':
+      void state.resync()
+  }
 }

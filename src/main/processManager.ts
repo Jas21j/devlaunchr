@@ -21,6 +21,7 @@ import { findExternalServers } from './adoption'
 import { describeHolder, resolveOwnership } from './ownership'
 import { invalidate as invalidateProcessView } from './processTable'
 import { effectiveCommand, pinnedPortOf, substitutePort } from './frameworkPorts'
+import * as idle from './idle'
 
 const SIGKILL_GRACE_MS = 5000
 const LOG_FLUSH_MS = 60
@@ -118,6 +119,10 @@ let flushTimer: NodeJS.Timeout | null = null
 
 function queueLog(runtime: Runtime, stream: LogLine['stream'], text: string): void {
   const line = runtime.logs.push(stream, stripAnsi(text))
+  // Output from the server itself is the best "someone is using this" signal
+  // there is: requests, rebuilds and hot reloads all log. devLaunchr's own
+  // system lines are not activity.
+  if (stream !== 'system') idle.touch(runtime.projectId, line.ts)
   const batch = pending.get(runtime.projectId) ?? []
   batch.push(line)
   pending.set(runtime.projectId, batch)

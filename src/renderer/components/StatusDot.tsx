@@ -1,6 +1,6 @@
 import type { ProjectStatus } from '@shared/types'
 
-const LABELS: Record<ProjectStatus, string> = {
+export const STATUS_LABELS: Record<ProjectStatus, string> = {
   running: 'Running',
   starting: 'Starting',
   stopping: 'Stopping',
@@ -10,42 +10,51 @@ const LABELS: Record<ProjectStatus, string> = {
 }
 
 /**
- * Status is carried by shape as much as by color — solid circle, hollow circle,
- * pulsing halo, diamond — so the four states stay distinguishable without
- * relying on hue. See DESIGN-APP.md, "Semantic status colors".
+ * Status is carried by shape as much as by colour — a filled circle with a
+ * halo, a hollow circle, a pulsing circle, a diamond — so the states stay
+ * distinguishable without relying on hue. See DESIGN.md, "Status".
  */
-export function StatusDot({ status }: { status: ProjectStatus }): React.JSX.Element {
+export function StatusDot({
+  status,
+  size = 7
+}: {
+  status: ProjectStatus
+  size?: number
+}): React.JSX.Element {
   const pending = status === 'starting' || status === 'stopping' || status === 'installing'
+  const color =
+    status === 'running'
+      ? 'var(--status-running)'
+      : status === 'crashed'
+        ? 'var(--status-crashed)'
+        : status === 'stopped'
+          ? 'var(--status-stopped)'
+          : 'var(--status-pending)'
 
   return (
     <span
-      className="relative inline-flex size-[7px] shrink-0 items-center justify-center"
+      className="relative inline-flex shrink-0 items-center justify-center"
+      style={{ width: size, height: size }}
       role="img"
-      aria-label={LABELS[status]}
-      title={LABELS[status]}
+      aria-label={STATUS_LABELS[status]}
+      title={STATUS_LABELS[status]}
     >
       {pending && (
         <span
-          className="absolute inset-0 animate-ping rounded-full opacity-60"
-          style={{ background: 'var(--status-pending)' }}
+          className="absolute inset-0 rounded-full"
+          style={{ background: color, animation: 'dl-pulse 1.4s var(--ease-out) infinite' }}
         />
       )}
       <span
         className="relative size-full"
         style={{
-          background: status === 'stopped' ? 'transparent' : `var(--status-${dotToken(status)})`,
-          border: status === 'stopped' ? '1.5px solid var(--status-stopped)' : 'none',
-          borderRadius: status === 'crashed' ? '1px' : '9999px',
-          transform: status === 'crashed' ? 'rotate(45deg) scale(0.86)' : undefined
+          background: status === 'stopped' ? 'transparent' : color,
+          border: status === 'stopped' ? `1.5px solid ${color}` : 'none',
+          borderRadius: status === 'crashed' ? '1.5px' : '9999px',
+          transform: status === 'crashed' ? 'rotate(45deg) scale(0.86)' : undefined,
+          boxShadow: status === 'running' ? '0 0 0 3px var(--accent-soft-strong)' : undefined
         }}
       />
     </span>
   )
-}
-
-function dotToken(status: ProjectStatus): string {
-  if (status === 'running') return 'running'
-  if (status === 'crashed') return 'crashed'
-  if (status === 'stopped') return 'stopped'
-  return 'pending'
 }
