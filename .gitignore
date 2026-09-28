@@ -12,3 +12,6 @@ resources/icon.icns
 resources/icon.png
 src/renderer/assets/mark.png
 src/renderer/assets/favicon.png
+
+# Launch film sources and renders live outside the product
+marketing/

@@ -2,6 +2,8 @@
 
 *A [Public Works](https://salesmansolutions.net/public-works/) release from [Salesman Solutions](https://salesmansolutions.net). Free and open source.*
 
+![devLaunchr scanning for projects, starting one with a click, previewing it live, explaining an error with its fix, and the command palette](docs/media/devlaunchr-demo.gif)
+
 A local dev portal for macOS, Windows, and Linux. It finds every web project on
 your machine, starts any of them with one click, previews them in embedded tabs,
 and — the part that actually matters — never leaves an orphaned process behind.
